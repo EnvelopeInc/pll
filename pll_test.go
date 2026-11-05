@@ -218,8 +218,8 @@ func TestEventChLateCorrectionChangesSubsequentTriggerTiming(t *testing.T) {
 	}
 }
 
-func TestEventBeforeFirstTickerUsesRunStartReference(t *testing.T) {
-	pll := NewPLL(0.0015, 100, 0, 0) // approximately one-second period, preventing a ticker race
+func TestEventBeforeFirstDeadlineUsesRunStartReference(t *testing.T) {
+	pll := NewPLL(0.0015, 100, 0, 0) // approximately one-second period, preventing a deadline race
 	ctx, cancel := context.WithCancel(context.Background())
 	pll.StartContext(ctx)
 	select {

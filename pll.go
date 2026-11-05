@@ -14,7 +14,7 @@ type PLL struct {
 	TriggerCh chan bool // PLL output signal, closed when the PLL stops.
 
 	period time.Duration // Period of reference clock signal
-	delay  time.Duration // number of nanoseconds to wait after receiving a ticker signal
+	delay  time.Duration // interval between scheduled trigger deadlines
 
 	kp int // Proportional gain (over 100)
 	ki int // Integral gain (over 100)
@@ -33,7 +33,7 @@ type PLL struct {
 
 // NewPLL creates a PLL for the specified bitrate in Mbps and initializes it
 // with the specified PID parameters. It panics if the bitrate is not finite and
-// positive or produces a period that cannot be represented by a valid ticker.
+// positive or produces a period outside the positive, representable time.Duration range accepted by time.NewTimer.
 func NewPLL(mbps float64, kp, ki, kd int) *PLL {
 	const packetSize = 188 * 8 // packet size in bits
 	if math.IsNaN(mbps) || math.IsInf(mbps, 0) || mbps <= 0 {
@@ -41,7 +41,7 @@ func NewPLL(mbps float64, kp, ki, kd int) *PLL {
 	}
 	periodNanos := float64(packetSize) / (mbps * 1e6) * 1e9
 	if math.IsInf(periodNanos, 0) || periodNanos < 1 || periodNanos >= float64(math.MaxInt64) {
-		panic("pll: bitrate produces an invalid ticker period")
+		panic("pll: bitrate produces a period outside the valid time.Timer range")
 	}
 	period := time.Duration(periodNanos)
 	return &PLL{

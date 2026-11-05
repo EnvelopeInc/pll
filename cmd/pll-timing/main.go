@@ -32,7 +32,7 @@ func main() {
 	const packetBits = 188 * 8
 	periodNanos := float64(packetBits) / (*rate * 1e6) * 1e9
 	if math.IsInf(periodNanos, 0) || periodNanos < 1 || periodNanos >= float64(math.MaxInt64) {
-		fatal("-mbps produces a period outside the valid time.Ticker range")
+		fatal("-mbps produces a period outside the valid time.Timer range")
 	}
 	period := time.Duration(periodNanos)
 	pll := pll.NewPLL(*rate, 0, 0, 0)
