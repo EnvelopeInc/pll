@@ -1,4 +1,4 @@
-module github.com/Channel-3-Eugene/pll
+module github.com/EnvelopeInc/pll
 
 go 1.22.2
 
