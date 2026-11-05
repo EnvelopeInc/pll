@@ -3,6 +3,7 @@ package pll
 import (
 	"context"
 	"math"
+	"math/big"
 	"sync"
 	"time"
 )
@@ -19,9 +20,9 @@ type PLL struct {
 	ki int // Integral gain (over 100)
 	kd int // Derivative gain (over 100)
 
-	integral  int       // Integral term for PID controller
+	integral  int64     // Integral term for PID controller
 	lastTick  time.Time // last tick time
-	lastDelta int       // Last delta (error) for PID controller
+	lastDelta int64     // Last delta (error) for PID controller
 
 	mu      sync.Mutex
 	started bool
@@ -90,44 +91,31 @@ func (pll *PLL) run(ctx context.Context) {
 		close(pll.done)
 	}()
 
-	ticker := time.NewTicker(pll.period)
-	defer ticker.Stop()
-
-	var triggerTimer *time.Timer
-	defer func() {
-		if triggerTimer != nil && !triggerTimer.Stop() {
-			select {
-			case <-triggerTimer.C:
-			default:
-			}
-		}
-	}()
-	var trigger <-chan time.Time
+	pll.lastTick = time.Now() // Events before the first deadline use run start as their reference.
+	deadline := pll.lastTick.Add(pll.period)
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			pll.lastTick = time.Now()
-			if triggerTimer == nil {
-				triggerTimer = time.NewTimer(pll.delay)
-			} else {
-				if !triggerTimer.Stop() {
-					select {
-					case <-triggerTimer.C:
-					default:
-					}
-				}
-				triggerTimer.Reset(pll.delay)
-			}
-			trigger = triggerTimer.C
-		case <-trigger:
+		case <-timer.C:
 			select {
 			case pll.TriggerCh <- true:
 			case <-ctx.Done():
 				return
 			}
-			trigger = nil
+			pll.lastTick = deadline
+			interval := pll.delay
+			if interval <= 0 {
+				interval = pll.period
+			}
+			deadline = deadline.Add(interval)
+			// Do not emit a burst to catch up after a delayed receiver or scheduler.
+			if !deadline.After(time.Now()) {
+				deadline = time.Now().Add(interval)
+			}
+			timer.Reset(time.Until(deadline))
 		case _, ok := <-pll.EventCh:
 			if !ok {
 				return
@@ -163,17 +151,55 @@ func (pll *PLL) Stop() {
 // all math is integer math here
 // we are adjusting the delay to get event to happen near the next tick
 func (pll *PLL) pidController(delta time.Duration) {
-	porportional := int(delta) * pll.kp / 100
-	pll.integral += int(delta) * pll.ki / 100
-	derivative := (int(delta) - pll.lastDelta) * pll.kd / 100
-	pll.lastDelta = int(delta)
+	deltaNanos := int64(delta)
+	proportional := scaledGain(deltaNanos, pll.kp)
+	pll.integral = saturatingAdd(pll.integral, scaledGain(deltaNanos, pll.ki))
+	derivative := scaledGain(saturatingSub(deltaNanos, pll.lastDelta), pll.kd)
+	pll.lastDelta = deltaNanos
 
-	delay := pll.delay - time.Duration(porportional+pll.integral+derivative)
-	if delay > pll.period {
-		delay = pll.period
+	// Use wide intermediates so arbitrary int gains cannot overflow before the
+	// output is bounded to the valid delay interval.
+	adjustment := new(big.Int).SetInt64(proportional)
+	adjustment.Add(adjustment, new(big.Int).SetInt64(pll.integral))
+	adjustment.Add(adjustment, new(big.Int).SetInt64(derivative))
+	delay := new(big.Int).Sub(big.NewInt(int64(pll.delay)), adjustment)
+	if delay.Sign() < 0 {
+		pll.delay = 0
+	} else if delay.Cmp(big.NewInt(int64(pll.period))) > 0 {
+		pll.delay = pll.period
+	} else {
+		pll.delay = time.Duration(delay.Int64())
 	}
-	if delay < 0 {
-		delay = 0
+}
+
+func scaledGain(value int64, gain int) int64 {
+	product := new(big.Int).Mul(big.NewInt(value), big.NewInt(int64(gain)))
+	product.Quo(product, big.NewInt(100))
+	if product.IsInt64() {
+		return product.Int64()
 	}
-	pll.delay = delay
+	if product.Sign() < 0 {
+		return math.MinInt64
+	}
+	return math.MaxInt64
+}
+
+func saturatingAdd(a, b int64) int64 {
+	if b > 0 && a > math.MaxInt64-b {
+		return math.MaxInt64
+	}
+	if b < 0 && a < math.MinInt64-b {
+		return math.MinInt64
+	}
+	return a + b
+}
+
+func saturatingSub(a, b int64) int64 {
+	if b > 0 && a < math.MinInt64+b {
+		return math.MinInt64
+	}
+	if b < 0 && a > math.MaxInt64+b {
+		return math.MaxInt64
+	}
+	return a - b
 }
