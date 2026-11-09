@@ -1,35 +1,60 @@
 # pll
 
-`github.com/EnvelopeInc/pll` generates `TriggerCh` pacing signals at the rate corresponding to 188-byte MPEG-TS packets and adjusts trigger timing from external events. It emits signals only: PLL does not read or send packets and does not depend on UDP, files, TCP, pipes, or any other transport.
+`github.com/EnvelopeInc/pll` generates transport-agnostic trigger signals at intervals derived from a target MPEG-TS bitrate, assuming 188-byte packets. External timing events can correct the schedule. It does not read, write, or parse packets, perform transport I/O, or guarantee wire-level timing.
 
-Install it with:
+Requires Go 1.22.2 or newer.
+
+## Install
 
 ```sh
-go get github.com/EnvelopeInc/pll
+go get github.com/EnvelopeInc/pll@v0.1.0
 ```
 
-## API and lifecycle
+## Example
 
-Create a PLL with `NewPLL(mbps, kp, ki, kd)`, where `mbps` is the target rate in decimal megabits per second and the integer PID gains are scaled by 100 (for example, `kp == 100` applies a proportional factor of 1). The constructor returns `*pll.PLL`; it panics if the rate is non-finite or non-positive, or would produce a period that is not a positive, representable `time.Duration` accepted by `time.NewTimer`. The packet period is calculated from 188 bytes at the target bitrate and truncated to `time.Duration` nanoseconds.
+```go
+package main
 
-`Start()` runs until `Stop()` is called. `StartContext(ctx)` runs until `ctx` is canceled or `Stop()` is called; passing a nil context panics. A PLL is one-shot: subsequent starts have no effect, including after it has stopped. `Stop()` is safe to call more than once, waits for the worker to exit, and prevents a not-yet-started PLL from starting. Stopping or context cancellation closes both channels.
+import (
+	"fmt"
 
-Send one value on `EventCh` for each external timing event to be used for correction; the boolean value is ignored. Receive pacing signals from `TriggerCh` (each emitted value is `true`). Both channels are unbuffered. The worker may block while delivering a trigger until a receiver accepts it, but cancellation and `Stop()` can still end that wait. Stop all goroutines sending to `EventCh` before calling `Stop()` or canceling the `StartContext` context, because either shutdown path closes the channel. Do not send to either channel after shutdown.
+	"github.com/EnvelopeInc/pll"
+)
 
-## Timing characterization
+func main() {
+	p := pll.NewPLL(10, 0, 0, 0) // 10 Mbps; zero PID gains
+	p.Start()
+	fmt.Println(<-p.TriggerCh)
+	p.Stop()
+}
+```
 
-Run the standalone standard-library harness with a target bitrate and bounded duration:
+## API and behavior
+
+- `NewPLL(mbps, kp, ki, kd)` takes a target decimal megabit-per-second rate. Each PID gain is an integer scaled by 100 (`100` means a factor of 1). It panics for a non-finite or non-positive rate, or when the derived packet period is outside the positive `time.Duration` range accepted by timers. The period uses 188-byte packets and is truncated to nanoseconds.
+- `Start()` runs the worker; `StartContext(ctx)` runs it until context cancellation or `Stop()`. A nil context panics. A PLL is one-shot: later starts do nothing, even after shutdown. `Stop()` is idempotent, waits for an active worker to exit, and prevents a not-yet-started PLL from starting.
+- `TriggerCh` emits unbuffered `true` signals. The worker can wait for a receiver, but shutdown can interrupt that wait. `EventCh` is an unbuffered input; send one value per external event to use for correction. The bool value is ignored. The first deadline is one packet period after worker start; event timing is compared with that deadline.
+- The PLL owns and closes both channels on shutdown; callers must not close them. Stop event-sender goroutines before calling `Stop()` or canceling the context, since either shutdown path closes `EventCh`. Do not send after shutdown.
+
+## Timing characterization and limitations
+
+The repository includes a bounded, standard-library timing harness:
 
 ```sh
 go run ./cmd/pll-timing -mbps 10 -duration 5s
 ```
 
-The harness runs with zero PID gains and sends no `EventCh` inputs, so it characterizes baseline timer/`TriggerCh` delivery rather than correction from an external timing source. It reports average period/rate error and interval-jitter percentiles, where jitter is the absolute deviation from the observed mean period. Duration is limited to 100ms–30s and storage to one million samples (the run stops early if that sample limit is reached). Results characterize this PLL implementation on the current OS/hardware only; they are not wire-level proof, a hardware-independent measurement, or a cross-platform timing guarantee. Scheduler load, timer resolution, channel scheduling, and the receiving process affect these metrics. No hardware-specific tolerance is asserted by tests.
+It uses zero PID gains and sends no `EventCh` inputs. It timestamps receipt from `TriggerCh` and reports average period/rate error and interval-jitter percentiles. Jitter is the absolute deviation from the observed mean period. Duration is limited to 100ms–30s and storage to one million samples, so a run may stop early at that sample limit. These measurements characterize trigger-channel delivery on the current host only; they do not measure packet transmission or wire timing and are not cross-platform guarantees. Timer resolution, OS scheduling, receiver scheduling, and workload affect results. The worker schedules against absolute deadlines but skips missed intervals instead of emitting catch-up bursts. Tests do not assert a hardware-specific timing tolerance.
 
-## Limitations
+PID gains are not range-validated. Intermediate arithmetic avoids integer overflow; the integral accumulator saturates at the `int64` bounds and the computed delay is clamped to `[0, period]`. This does not guarantee stable or useful control for any gain choice. Validate behavior on the target host and workload.
 
-PID gain ranges are not validated. PID intermediates are computed safely and the resulting delay is clamped to `[0, period]`; the integral accumulator saturates at the `int64` limits rather than wrapping. This arithmetic protection does not establish that any particular gain values produce stable or useful control. An event received before the first timer deadline is referenced to the worker's run start. Validate pacing with the target stream and workload; tests and the harness do not establish wire timing or MPEG-TS integration behavior.
+## Contributing
 
-## Development and releases
+Format Go changes with `gofmt`. Before opening a pull request, run:
 
-CI runs `go test -race ./...` and `go vet ./...` on Go 1.22.x and the stable Go release. Run the same checks locally. For versioning and publication instructions, see [RELEASING.md](RELEASING.md).
+```sh
+go test -race ./...
+go vet ./...
+```
+
+Pull requests should explain the user-visible change, include focused tests for behavior changes, and report relevant validation. Keep documentation aligned with the API and its timing limitations. CI runs the race tests and vet on Go 1.22.x and the current stable Go version.
