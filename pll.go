@@ -1,7 +1,8 @@
 // Package pll provides a transport-agnostic phase-locked loop for MPEG-TS
 // pacing. It emits [PLL.TriggerCh] signals at intervals derived from the target
-// bitrate and adjusts pacing in response to [PLL.EventCh] events. It does not
-// send or receive packets or guarantee wire-level timing.
+// bitrate, using 188-byte packets by default or a configurable packet size, and
+// adjusts pacing in response to [PLL.EventCh] events. It does not send or receive
+// packets or guarantee wire-level timing.
 package pll
 
 import (
@@ -35,15 +36,43 @@ type PLL struct {
 	done    chan struct{}
 }
 
+type config struct {
+	packetSize int
+}
+
+// Option configures a PLL created by [NewPLL].
+type Option func(*config)
+
+// WithPacketSize sets the packet size in bytes. Common MPEG transport packet
+// sizes are 188 bytes for standard TS, 192 bytes for M2TS/BDAV, and 204 bytes
+// for DVB packets with Reed-Solomon parity. The size must be positive.
+func WithPacketSize(bytes int) Option {
+	return func(c *config) {
+		c.packetSize = bytes
+	}
+}
+
 // NewPLL creates a PLL for the specified bitrate in Mbps and initializes it
-// with the specified PID parameters. It panics if the bitrate is not finite and
-// positive or produces a period outside the positive, representable time.Duration range accepted by time.NewTimer.
-func NewPLL(mbps float64, kp, ki, kd int) *PLL {
-	const packetSize = 188 * 8 // packet size in bits
+// with the specified PID parameters and options. It panics if the bitrate is
+// not finite and positive, an option is nil, the packet size is not positive, or
+// the resulting period is outside the positive, representable time.Duration
+// range accepted by time.NewTimer.
+func NewPLL(mbps float64, kp, ki, kd int, opts ...Option) *PLL {
+	c := config{packetSize: 188}
+	for _, opt := range opts {
+		if opt == nil {
+			panic("pll: nil option")
+		}
+		opt(&c)
+	}
+	if c.packetSize <= 0 {
+		panic("pll: packet size must be positive")
+	}
 	if math.IsNaN(mbps) || math.IsInf(mbps, 0) || mbps <= 0 {
 		panic("pll: bitrate must be a finite positive number of Mbps")
 	}
-	periodNanos := float64(packetSize) / (mbps * 1e6) * 1e9
+	packetBits := float64(c.packetSize) * 8
+	periodNanos := packetBits / (mbps * 1e6) * 1e9
 	if math.IsInf(periodNanos, 0) || periodNanos < 1 || periodNanos >= float64(math.MaxInt64) {
 		panic("pll: bitrate produces a period outside the valid time.Timer range")
 	}

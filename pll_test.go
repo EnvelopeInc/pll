@@ -10,6 +10,48 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestNewPLLPacketSize(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		size int
+		want time.Duration
+	}{
+		{name: "default", size: 188, want: 150400 * time.Nanosecond},
+		{name: "192 bytes", size: 192, want: 153600 * time.Nanosecond},
+		{name: "204 bytes", size: 204, want: 163200 * time.Nanosecond},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewPLL(10, 0, 0, 0)
+			if tc.size != 188 {
+				p = NewPLL(10, 0, 0, 0, WithPacketSize(tc.size))
+			}
+			assert.Equal(t, tc.want, p.period)
+		})
+	}
+}
+
+func TestNewPLLRejectsInvalidPacketSize(t *testing.T) {
+	for _, size := range []int{0, -1} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			assert.PanicsWithValue(t, "pll: packet size must be positive", func() {
+				NewPLL(10, 0, 0, 0, WithPacketSize(size))
+			})
+		})
+	}
+}
+
+func TestNewPLLRejectsNilOption(t *testing.T) {
+	assert.PanicsWithValue(t, "pll: nil option", func() {
+		NewPLL(10, 0, 0, 0, nil)
+	})
+}
+
+func TestNewPLLRejectsUnrepresentablePacketPeriod(t *testing.T) {
+	assert.PanicsWithValue(t, "pll: bitrate produces a period outside the valid time.Timer range", func() {
+		NewPLL(1e-12, 0, 0, 0, WithPacketSize(int(^uint(0)>>1)))
+	})
+}
+
 func TestNewPLLRejectsInvalidBitrate(t *testing.T) {
 	for _, mbps := range []float64{0, -1, math.NaN(), math.Inf(1), math.Inf(-1), math.SmallestNonzeroFloat64, 1e12} {
 		t.Run(fmt.Sprint(mbps), func(t *testing.T) {
