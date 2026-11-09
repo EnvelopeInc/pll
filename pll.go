@@ -1,3 +1,7 @@
+// Package pll provides a transport-agnostic phase-locked loop for MPEG-TS
+// pacing. It emits [PLL.TriggerCh] signals at intervals derived from the target
+// bitrate and adjusts pacing in response to [PLL.EventCh] events. It does not
+// send or receive packets or guarantee wire-level timing.
 package pll
 
 import (
