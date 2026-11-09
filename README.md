@@ -7,7 +7,7 @@ Requires Go 1.22.2 or newer.
 ## Install
 
 ```sh
-go get github.com/EnvelopeInc/pll@v0.1.0
+go get github.com/EnvelopeInc/pll@v0.1.1
 ```
 
 ## Example
