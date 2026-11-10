@@ -1,4 +1,4 @@
-// Package pll provides a transport-agnostic phase-locked loop for MPEG-TS
+// Package pll provides a transport-agnostic phase-locked loop for bitrate
 // pacing. It emits [PLL.TriggerCh] signals at intervals derived from the target
 // bitrate, using 188-byte packets by default or a configurable packet size, and
 // adjusts pacing in response to [PLL.EventCh] events. It does not send or receive
@@ -43,9 +43,7 @@ type config struct {
 // Option configures a PLL created by [NewPLL].
 type Option func(*config)
 
-// WithPacketSize sets the packet size in bytes. Common MPEG transport packet
-// sizes are 188 bytes for standard TS, 192 bytes for M2TS/BDAV, and 204 bytes
-// for DVB packets with Reed-Solomon parity. The size must be positive.
+// WithPacketSize sets the packet size in bytes. The size must be positive.
 func WithPacketSize(bytes int) Option {
 	return func(c *config) {
 		c.packetSize = bytes
