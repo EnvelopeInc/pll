@@ -34,3 +34,6 @@ SPEC.md and tests: no disagreement found for this task.
 21: follower.go: DefaultFollowerConfig returns the SPEC 2.2 defaults (adds math import); TestDefaultFollowerConfig passes; gofmt, vet clean; full suite 39 pass/30 fail -> 40 pass/29 fail, no regressions.
 Next: NewFollower validation (2.2 table, first failing field in order, *ConfigError); Nominal is stored unchecked here, so NewFollower must check it with Rate.Num/Den.
 SPEC.md and follower_test.go: no disagreement found for this task.
+22: follower.go: NewFollower validates via FollowerConfig.validate in SPEC 2.2 order (*ConfigError); Follower now holds cfg, pn, wn and unexported loop/order/window/outlier/lock/jitter state fields (SPEC 2.3-2.5); other methods still stubs. TestNewFollowerValidation passes; gofmt, vet clean; full suite 40 pass/29 fail -> 41 pass/28 fail, no pass->fail (baseline from HEAD follower.go in /tmp/base22).
+Next: Observe/Local/Remote (task 23+) should use the anchor fields l0+l0frac, r0, y, ref, hasPrev/prevLocal/prevRemote; the struct fields are a proposal, rename or drop any the later tasks do not need.
+SPEC.md and follower_test.go: no disagreement found for this task.

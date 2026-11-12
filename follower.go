@@ -59,12 +59,82 @@ func DefaultFollowerConfig(nominal Rate) FollowerConfig {
 //
 // The fields are yours to choose. SPEC.md, part 2, says what state the loop
 // keeps; Observe must not allocate.
-type Follower struct{}
+type Follower struct {
+	cfg FollowerConfig // validated configuration
+	pn  float64        // nominal tick period, ns: Den × 1e9 / Num
+	wn  float64        // loop natural frequency, rad/s: 2π × Bandwidth
+
+	// Mapping: remote R0 ticks at local time l0 + l0frac ns (SPEC 2.3).
+	anchored bool
+	l0       time.Duration
+	l0frac   float64
+	r0       int64
+	y        float64       // fractional rate offset
+	ref      time.Duration // local time of the last anchor, step or loop update
+
+	// Reading order (SPEC 2.4.1): the last reading that returned no error.
+	hasPrev    bool
+	prevLocal  time.Duration
+	prevRemote int64
+
+	// Window (SPEC 2.4.3). Unused when cfg.Window is 0.
+	winOpen    bool
+	winStart   time.Duration
+	winCand    bool // whether a candidate is held
+	candLocal  time.Duration
+	candRemote int64
+	candErr    float64 // phase error of the candidate, ns
+
+	// Outlier run (SPEC 2.5.1).
+	runLen int
+	runErr float64 // error of the run's first outlier, ns
+
+	// Lock and jitter (SPEC 2.5.3, 2.5.4).
+	lockRun  int
+	lastAcc  time.Duration // local time of the last accepted sample, or anchor/step
+	accepted int           // accepted samples since the last anchor, step or Reset, capped at 2
+	jitterM  float64       // weighted mean of squared phase errors, ns²
+}
 
 // NewFollower returns a Follower with no readings. An invalid field returns
 // nil and a *ConfigError naming the first bad field in declaration order.
 func NewFollower(cfg FollowerConfig) (*Follower, error) {
-	return nil, nil
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	return &Follower{
+		cfg: cfg,
+		pn:  float64(cfg.Nominal.Den()) * 1e9 / float64(cfg.Nominal.Num()),
+		wn:  2 * math.Pi * cfg.Bandwidth,
+	}, nil
+}
+
+// validate checks the fields in SPEC 2.2 order and returns a *ConfigError for
+// the first one that fails.
+func (c FollowerConfig) validate() error {
+	switch {
+	case c.Nominal.Num() == 0 || c.Nominal.Den() == 0:
+		return &ConfigError{"Nominal", "must be a valid Rate"}
+	case !(c.Bandwidth > 0) || math.IsInf(c.Bandwidth, 0):
+		return &ConfigError{"Bandwidth", "must be finite and > 0"}
+	case !(c.Damping > 0) || math.IsInf(c.Damping, 0):
+		return &ConfigError{"Damping", "must be finite and > 0"}
+	case !(c.MaxOffsetPPM > 0 && c.MaxOffsetPPM < 1e6):
+		return &ConfigError{"MaxOffsetPPM", "must be finite, > 0 and < 1000000"}
+	case c.Window < 0:
+		return &ConfigError{"Window", "must be >= 0"}
+	case c.OutlierThreshold <= 0:
+		return &ConfigError{"OutlierThreshold", "must be > 0"}
+	case c.StepAfter < 1:
+		return &ConfigError{"StepAfter", "must be >= 1"}
+	case c.LockThreshold < 0:
+		return &ConfigError{"LockThreshold", "must be >= 0"}
+	case c.LockCount < 1:
+		return &ConfigError{"LockCount", "must be >= 1"}
+	case c.HoldoverAfter <= 0:
+		return &ConfigError{"HoldoverAfter", "must be > 0"}
+	}
+	return nil
 }
 
 // Observe feeds one reading: the remote clock showed remote ticks at local
