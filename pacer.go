@@ -84,6 +84,41 @@ func (g *segment) floorTime(s uint64) (int64, bool) {
 	return int64(q) + g.anchor, true
 }
 
+// ceilTime returns ceil(T(s)) for slot s >= g.start: the first whole
+// nanosecond at or after which slot s is due. It returns false when that time
+// does not fit in an int64.
+func (g *segment) ceilTime(s uint64) (int64, bool) {
+	k := s - g.start
+	if !g.small {
+		t := new(big.Int).SetUint64(k)
+		t.Mul(t, g.bigPn)
+		q, r := new(big.Int).QuoRem(t, g.bigPd, new(big.Int))
+		if r.Sign() != 0 {
+			q.Add(q, big.NewInt(1))
+		}
+		q.Add(q, big.NewInt(g.anchor))
+		if !q.IsInt64() {
+			return 0, false
+		}
+		return q.Int64(), true
+	}
+	hi, lo := bits.Mul64(k, g.pn)
+	if hi >= g.pd {
+		return 0, false // the quotient is at least 2^64, far beyond an int64
+	}
+	q, r := bits.Div64(hi, lo, g.pd)
+	if r != 0 {
+		if q == math.MaxUint64 {
+			return 0, false
+		}
+		q++
+	}
+	if q > uint64(math.MaxInt64-g.anchor) {
+		return 0, false
+	}
+	return int64(q) + g.anchor, true
+}
+
 // NewPacer returns a Pacer for rate r with no trim. An invalid Rate returns
 // nil and ErrInvalidRate.
 func NewPacer(r Rate) (*Pacer, error) {
@@ -144,7 +179,14 @@ func (p *Pacer) Skip(now time.Duration, keep uint64) (uint64, error) {
 // Errors: ErrOverflow when the cursor has reached math.MaxUint64 or that time
 // exceeds the largest time.Duration; slot and at are then zero.
 func (p *Pacer) NextDue() (slot uint64, at time.Duration, err error) {
-	return 0, 0, nil
+	if p.cursor == math.MaxUint64 {
+		return 0, 0, ErrOverflow
+	}
+	t, ok := p.seg.ceilTime(p.cursor)
+	if !ok {
+		return 0, 0, ErrOverflow
+	}
+	return p.cursor, time.Duration(t), nil
 }
 
 // SetTrim sets the rate to nominal × (1 + ppt/1e12) for the cursor slot and

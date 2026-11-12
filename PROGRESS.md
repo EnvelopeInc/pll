@@ -19,3 +19,6 @@ SPEC.md and tests: no disagreement found for this task.
 08: span.go: All yields (First+i, Time(i)) for i < Count and stops when yield returns false; TestSpanAll and ExampleSpan_All pass; gofmt, vet clean; TestUnitsPerSecond, TestBitsPerSecond, TestRateString, TestNewPacer, TestClaim, TestSpanTime* still pass; remaining failures are only Due/Skip/NextDue/SetTrim-dependent tests (stubs).
 Next: Due, Skip, NextDue and SetTrim are still stubs; they need the largest-due-slot helper (segment.floorTime's inverse) and the ceil-time computation.
 SPEC.md and pacer_test.go: no disagreement found for this task.
+09: pacer.go: NextDue returns cursor and ceil(T(cursor)) via new segment.ceilTime (uint64 fast path with bits.Div64 plus remainder round-up, big.Int fallback); ErrOverflow at MaxUint64 or unfit time. TestNextDue passes; gofmt, vet clean; other tests still fail only in Due/SetTrim/Skip stubs (TestOverflow, TestBoundaries, TestDifferential, TestDue*, TestSkip, TestSetTrim*, Fuzz, Alloc, Example*).
+Next: Due (task 10) should reuse the largest-due-slot logic: S + floor((now-A)*pd/pn) capped at MaxUint64; ceilTime and floorTime are the model for the new helper.
+SPEC.md and pacer_test.go: no disagreement found for this task.
