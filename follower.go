@@ -142,17 +142,98 @@ func (c FollowerConfig) validate() error {
 // the loop, its phase error. A reading out of order returns ErrOrder and
 // changes nothing.
 func (f *Follower) Observe(local time.Duration, remote int64) (Observation, error) {
+	if !f.anchored {
+		f.anchor(local, remote)
+		f.hasPrev, f.prevLocal, f.prevRemote = true, local, remote
+		return Observation{Status: StatusAnchored}, nil
+	}
+	// Ordering, windows and the loop are not built yet (SPEC 2.4, 2.5).
 	return Observation{}, nil
+}
+
+// anchor sets the mapping to remote at local time local, with rate offset 0,
+// and resets the loop's sample history (SPEC 2.4.2, 2.5).
+func (f *Follower) anchor(local time.Duration, remote int64) {
+	f.anchored = true
+	f.l0, f.l0frac = local, 0
+	f.r0 = remote
+	f.y = 0
+	f.ref = local
+	f.lastAcc = local
+	f.accepted = 0
+	f.lockRun = 0
+	f.jitterM = 0
+	f.runLen = 0
 }
 
 // Local maps remote ticks to local time, rounded to the nearest nanosecond.
 func (f *Follower) Local(remote int64) (time.Duration, error) {
-	return 0, nil
+	if !f.anchored {
+		return 0, ErrNotAnchored
+	}
+	// Exact when remote - r0 fits in int64; otherwise the float64 result
+	// is approximate, but such a distance is far outside any real clock.
+	var ticks float64
+	if d, ok := subInt64(remote, f.r0); ok {
+		ticks = float64(d)
+	} else {
+		ticks = float64(remote) - float64(f.r0)
+	}
+	ns := math.Round(ticks*f.pn/(1+f.y) + f.l0frac)
+	return addNanos(f.l0, ns)
 }
 
 // Remote maps local time to remote ticks, rounded to the nearest tick.
 func (f *Follower) Remote(local time.Duration) (int64, error) {
-	return 0, nil
+	if !f.anchored {
+		return 0, ErrNotAnchored
+	}
+	var ns float64
+	if d, ok := subInt64(int64(local), int64(f.l0)); ok {
+		ns = float64(d)
+	} else {
+		ns = float64(local) - float64(f.l0)
+	}
+	ticks := math.Round((ns - f.l0frac) * (1 + f.y) / f.pn)
+	if !(ticks >= -(1<<63) && ticks < 1<<63) {
+		return 0, ErrOverflow
+	}
+	r, ok := addInt64(f.r0, int64(ticks))
+	if !ok {
+		return 0, ErrOverflow
+	}
+	return r, nil
+}
+
+// subInt64 returns a - b and whether it fits in int64.
+func subInt64(a, b int64) (int64, bool) {
+	d := a - b
+	if (b > 0 && d > a) || (b < 0 && d < a) {
+		return 0, false
+	}
+	return d, true
+}
+
+// addInt64 returns a + b and whether it fits in int64.
+func addInt64(a, b int64) (int64, bool) {
+	s := a + b
+	if (b > 0 && s < a) || (b < 0 && s > a) {
+		return 0, false
+	}
+	return s, true
+}
+
+// addNanos returns base + ns, where ns is a whole number of nanoseconds, or
+// ErrOverflow when the sum or ns does not fit in a time.Duration.
+func addNanos(base time.Duration, ns float64) (time.Duration, error) {
+	if !(ns >= -(1<<63) && ns < 1<<63) {
+		return 0, ErrOverflow
+	}
+	s, ok := addInt64(int64(base), int64(ns))
+	if !ok {
+		return 0, ErrOverflow
+	}
+	return time.Duration(s), nil
 }
 
 // Offset returns the estimated fractional rate offset y: the remote clock
