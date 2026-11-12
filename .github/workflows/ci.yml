@@ -43,3 +43,5 @@ jobs:
           go-version: stable
       - name: Fuzz the pacer
         run: go test -run '^$' -fuzz '^FuzzPacer$' -fuzztime 30s .
+      - name: Fuzz the follower
+        run: go test -run '^$' -fuzz '^FuzzFollower$' -fuzztime 30s .

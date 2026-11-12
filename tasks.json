@@ -140,13 +140,193 @@
     },
     {
       "id": "20",
-      "title": "Examples",
+      "title": "Pacer examples",
+      "package": ".",
+      "test": "go test . -run '^Example(Pacer|Span)_' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "21",
+      "title": "DefaultFollowerConfig",
+      "package": ".",
+      "test": "go test . -run '^TestDefaultFollowerConfig$' -count=1",
+      "tier": "normal",
+      "note": "Stage 2 starts here. Read SPEC.md part 2 in full first. follower_errors.go and status.go are complete."
+    },
+    {
+      "id": "22",
+      "title": "NewFollower: validate every field in order, *ConfigError",
+      "package": ".",
+      "test": "go test . -run '^TestNewFollowerValidation$' -count=1",
+      "tier": "normal",
+      "note": "Decide the Follower's fields here; SPEC.md 2.3 says what the loop keeps. Hold the anchor as integer nanoseconds plus a float64 fraction."
+    },
+    {
+      "id": "23",
+      "title": "Observe anchors on the first reading; Local, Remote, ErrNotAnchored",
+      "package": ".",
+      "test": "go test . -run '^TestFollowerAnchors$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "24",
+      "title": "Observe: ErrOrder for readings out of order",
+      "package": ".",
+      "test": "go test . -run '^TestFollowerOrder$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "25",
+      "title": "Observe: feed samples to the loop; lock after LockCount good samples",
+      "package": ".",
+      "test": "go test . -run '^TestPerfectClock$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "26",
+      "title": "The loop equations, with the gain cap for sparse samples",
+      "package": ".",
+      "test": "go test . -run '^TestLoopEquations$' -count=1",
+      "tier": "hard",
+      "note": "followermodel_test.go applies the equations from SPEC.md 2.5 literally; match it."
+    },
+    {
+      "id": "27",
+      "title": "The rate estimate converges on a fast clock",
+      "package": ".",
+      "test": "go test . -run '^TestOffsetConverges$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "28",
+      "title": "The rate estimate stops at MaxOffsetPPM",
+      "package": ".",
+      "test": "go test . -run '^TestOffsetClamp$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "29",
+      "title": "Remote is the inverse of Local",
+      "package": ".",
+      "test": "go test . -run '^TestRemoteInverse$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "30",
+      "title": "Trim is round(Offset \u00d7 1e12)",
+      "package": ".",
+      "test": "go test . -run '^TestTrim$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "31",
+      "title": "Jitter: exponentially weighted RMS of accepted errors",
+      "package": ".",
+      "test": "go test . -run '^TestJitter$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "32",
+      "title": "The lower-envelope window",
+      "package": ".",
+      "test": "go test . -run '^TestWindow$' -count=1",
+      "tier": "hard"
+    },
+    {
+      "id": "33",
+      "title": "Outliers are rejected and change nothing",
+      "package": ".",
+      "test": "go test . -run '^TestOutliers$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "34",
+      "title": "Agreeing outliers step the clock and keep the rate",
+      "package": ".",
+      "test": "go test . -run '^TestSteps$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "35",
+      "title": "Lock, loss of lock and holdover",
+      "package": ".",
+      "test": "go test . -run '^TestLockAndHoldover$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "36",
+      "title": "Reset forgets everything",
+      "package": ".",
+      "test": "go test . -run '^TestReset$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "37",
+      "title": "Local times past 2^53 ns",
+      "package": ".",
+      "test": "go test . -run '^TestFollowerLargeTimes$' -count=1",
+      "tier": "hard"
+    },
+    {
+      "id": "38",
+      "title": "1000 days without losing precision",
+      "package": ".",
+      "test": "go test . -run '^TestFollowerLongRun$' -count=1",
+      "tier": "hard",
+      "note": "If this fails while short runs pass, the anchor is accumulating elapsed time in a float64: rebase it into integer nanoseconds plus a fraction at every update."
+    },
+    {
+      "id": "39",
+      "title": "Randomized differential test against the literal loop model",
+      "package": ".",
+      "test": "go test . -run '^TestFollowerDifferential$' -count=1",
+      "tier": "hard"
+    },
+    {
+      "id": "40",
+      "title": "Invariants after every reading on random sequences",
+      "package": ".",
+      "test": "go test . -run '^TestFollowerInvariants$' -count=1",
+      "tier": "hard"
+    },
+    {
+      "id": "41",
+      "title": "Fuzz target seeds, including a saved regression case",
+      "package": ".",
+      "test": "go test . -run '^FuzzFollower$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "42",
+      "title": "No allocation in Observe and the readers",
+      "package": ".",
+      "test": "go test . -run '^TestFollowerAllocs$' -count=1",
+      "tier": "hard"
+    },
+    {
+      "id": "43",
+      "title": "Simulator scenarios within their thresholds",
+      "package": ".",
+      "test": "go test . -run '^TestScenarios$' -count=1",
+      "tier": "hard",
+      "note": "internal/sim is complete. Run go run ./cmd/pllsim to see what each scenario measures."
+    },
+    {
+      "id": "44",
+      "title": "Pacer linked to a follower keeps a device's queue level",
+      "package": ".",
+      "test": "go test . -run '^TestDeviceSink$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "45",
+      "title": "All examples",
       "package": ".",
       "test": "go test . -run '^Example' -count=1",
       "tier": "normal"
     },
     {
-      "id": "21",
+      "id": "46",
       "title": "Whole tree: formatted, vetted, every test green, race detector clean",
       "package": ".",
       "test": "test -z \"$(gofmt -l .)\" && go vet ./... && go test ./... -count=1 && go test -race ./... -count=1",
