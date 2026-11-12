@@ -1,0 +1,156 @@
+{
+  "tasks": [
+    {
+      "id": "01",
+      "title": "UnitsPerSecond, Num and Den: validate and reduce to lowest terms",
+      "package": ".",
+      "test": "go test . -run '^TestUnitsPerSecond$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "02",
+      "title": "BitsPerSecond",
+      "package": ".",
+      "test": "go test . -run '^TestBitsPerSecond$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "03",
+      "title": "Rate.String",
+      "package": ".",
+      "test": "go test . -run '^TestRateString$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "04",
+      "title": "NewPacer and Trim",
+      "package": ".",
+      "test": "go test . -run '^TestNewPacer$' -count=1",
+      "tier": "normal",
+      "note": "Decide the Pacer's fields here. Read SPEC.md, sections Arithmetic and Allocation, before choosing them: later tasks need exact times and no allocation per call."
+    },
+    {
+      "id": "05",
+      "title": "Pacer.Claim: contiguous spans and the n = 0 error",
+      "package": ".",
+      "test": "go test . -run '^TestClaim$' -count=1",
+      "tier": "normal",
+      "note": "Claim's overflow checks are tested in a later task, but write them now as SPEC.md describes."
+    },
+    {
+      "id": "06",
+      "title": "Span.Time: exact floor times without trim",
+      "package": ".",
+      "test": "go test . -run '^TestSpanTimeNominal$' -count=1",
+      "tier": "hard",
+      "note": "Span needs unexported fields that snapshot the timing it was issued under; see SPEC.md, section Arithmetic."
+    },
+    {
+      "id": "07",
+      "title": "Span.Time panics out of range",
+      "package": ".",
+      "test": "go test . -run '^TestSpanTimePanics$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "08",
+      "title": "Span.All",
+      "package": ".",
+      "test": "go test . -run '^TestSpanAll$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "09",
+      "title": "Pacer.NextDue: the ceiling of the cursor slot's exact time",
+      "package": ".",
+      "test": "go test . -run '^TestNextDue$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "10",
+      "title": "Pacer.Due: hand out the slots due at now",
+      "package": ".",
+      "test": "go test . -run '^TestDue$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "11",
+      "title": "Pacer.Due: max, invalid arguments, an earlier now",
+      "package": ".",
+      "test": "go test . -run '^TestDueLimits$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "12",
+      "title": "Pacer.Skip",
+      "package": ".",
+      "test": "go test . -run '^TestSkip$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "13",
+      "title": "Pacer.SetTrim: validation, new timing, floor anchoring, same-value no-op",
+      "package": ".",
+      "test": "go test . -run '^TestSetTrim$' -count=1",
+      "tier": "hard"
+    },
+    {
+      "id": "14",
+      "title": "Pacer.SetTrim never changes spans already handed out",
+      "package": ".",
+      "test": "go test . -run '^TestSetTrimKeepsSpans$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "15",
+      "title": "Overflow: slot index and time limits",
+      "package": ".",
+      "test": "go test . -run '^TestOverflow$' -count=1",
+      "tier": "hard"
+    },
+    {
+      "id": "16",
+      "title": "Exactness at the numeric limits, compared with the model",
+      "package": ".",
+      "test": "go test . -run '^TestBoundaries$' -count=1",
+      "tier": "hard",
+      "note": "model_test.go holds the reference model. Any disagreement is a bug in the Pacer: arithmetic beyond 128 bits must fall back to math/big."
+    },
+    {
+      "id": "17",
+      "title": "Randomized differential test against the model",
+      "package": ".",
+      "test": "go test . -run '^TestDifferential$' -count=1",
+      "tier": "hard"
+    },
+    {
+      "id": "18",
+      "title": "Fuzz target seeds",
+      "package": ".",
+      "test": "go test . -run '^FuzzPacer$' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "19",
+      "title": "No allocation on the hot paths",
+      "package": ".",
+      "test": "go test . -run '^TestAllocs$' -count=1",
+      "tier": "hard",
+      "note": "Profile with go test -run '^TestAllocs$' -memprofile. Typical causes: math/big on the common path, or a heap value made per call."
+    },
+    {
+      "id": "20",
+      "title": "Examples",
+      "package": ".",
+      "test": "go test . -run '^Example' -count=1",
+      "tier": "normal"
+    },
+    {
+      "id": "21",
+      "title": "Whole tree: formatted, vetted, every test green, race detector clean",
+      "package": ".",
+      "test": "test -z \"$(gofmt -l .)\" && go vet ./... && go test ./... -count=1 && go test -race ./... -count=1",
+      "tier": "normal"
+    }
+  ]
+}
