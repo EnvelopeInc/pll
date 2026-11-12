@@ -1,6 +1,9 @@
 package pll
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // FollowerConfig configures a Follower. Start from DefaultFollowerConfig and
 // change what you need; NewFollower checks every field.
@@ -36,7 +39,18 @@ type FollowerConfig struct {
 // OutlierThreshold 5 ms, StepAfter 3, LockThreshold 100 µs, LockCount 8,
 // HoldoverAfter 5 s.
 func DefaultFollowerConfig(nominal Rate) FollowerConfig {
-	return FollowerConfig{}
+	return FollowerConfig{
+		Nominal:          nominal,
+		Bandwidth:        0.1,
+		Damping:          math.Sqrt2 / 2,
+		MaxOffsetPPM:     500,
+		Window:           0,
+		OutlierThreshold: 5 * time.Millisecond,
+		StepAfter:        3,
+		LockThreshold:    100 * time.Microsecond,
+		LockCount:        8,
+		HoldoverAfter:    5 * time.Second,
+	}
 }
 
 // Follower is a second-order (type-II) phase-locked loop that tracks a remote

@@ -31,3 +31,6 @@ SPEC.md and pacer_test.go: no disagreement found for this task.
 13: pacer.go: SetTrim validates bounds, returns early for unchanged trim, checks floor(cursor time) before replacing the immutable segment, and uses the retained nominal Rate; issued spans stay unchanged. TestSetTrim, gofmt, vet and full suite pass.
 Next: task 13 complete; no previously passing tests regressed (20 passing/17 failing test/subtest results -> 37 passing/0 failing); baseline/final logs and comparison: /tmp/pll-task13.Gq52FQ.
 SPEC.md and tests: no disagreement found for this task.
+21: follower.go: DefaultFollowerConfig returns the SPEC 2.2 defaults (adds math import); TestDefaultFollowerConfig passes; gofmt, vet clean; full suite 39 pass/30 fail -> 40 pass/29 fail, no regressions.
+Next: NewFollower validation (2.2 table, first failing field in order, *ConfigError); Nominal is stored unchecked here, so NewFollower must check it with Rate.Num/Den.
+SPEC.md and follower_test.go: no disagreement found for this task.
