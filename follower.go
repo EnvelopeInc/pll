@@ -77,7 +77,6 @@ type Follower struct {
 	// Window (SPEC 2.4.3). Unused when cfg.Window is 0.
 	winOpen    bool
 	winStart   time.Duration
-	winCand    bool // whether a candidate is held
 	candLocal  time.Duration
 	candRemote int64
 	candErr    float64 // phase error of the candidate, ns
@@ -169,7 +168,7 @@ func (f *Follower) Observe(local time.Duration, remote int64) (Observation, erro
 			}
 			*f = next
 		}
-		f.winOpen, f.winCand = true, true
+		f.winOpen = true
 		f.winStart = local
 		f.candLocal, f.candRemote = local, remote
 		// Use the mapping after the flush for the new window's errors.
