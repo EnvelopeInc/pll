@@ -1,7 +1,9 @@
 package pll
 
 import (
+	"math"
 	"math/big"
+	"math/bits"
 	"time"
 )
 
@@ -55,6 +57,33 @@ func newSegment(num, den, start uint64, anchor, trim int64) *segment {
 	return seg
 }
 
+// floorTime returns floor(T(s)) for slot s >= g.start, the time in nanoseconds
+// of slot s under this segment. It returns false when that time does not fit
+// in an int64. The anchor is never negative, because it is the floor of a time
+// that is not negative.
+func (g *segment) floorTime(s uint64) (int64, bool) {
+	k := s - g.start
+	if !g.small {
+		t := new(big.Int).SetUint64(k)
+		t.Mul(t, g.bigPn)
+		t.Quo(t, g.bigPd) // k and the period are not negative, so Quo is floor
+		t.Add(t, big.NewInt(g.anchor))
+		if !t.IsInt64() {
+			return 0, false
+		}
+		return t.Int64(), true
+	}
+	hi, lo := bits.Mul64(k, g.pn)
+	if hi >= g.pd {
+		return 0, false // the quotient is at least 2^64, far beyond an int64
+	}
+	q, _ := bits.Div64(hi, lo, g.pd)
+	if q > uint64(math.MaxInt64-g.anchor) {
+		return 0, false
+	}
+	return int64(q) + g.anchor, true
+}
+
 // NewPacer returns a Pacer for rate r with no trim. An invalid Rate returns
 // nil and ErrInvalidRate.
 func NewPacer(r Rate) (*Pacer, error) {
@@ -83,7 +112,18 @@ func (p *Pacer) Due(now time.Duration, max uint64) (Span, error) {
 // reach slot math.MaxUint64 or its last slot's time would exceed the largest
 // time.Duration. On error nothing changes.
 func (p *Pacer) Claim(n uint64) (Span, error) {
-	return Span{}, nil
+	if n == 0 {
+		return Span{}, ErrInvalidArgument
+	}
+	if n > math.MaxUint64-p.cursor {
+		return Span{}, ErrOverflow
+	}
+	if _, ok := p.seg.floorTime(p.cursor + n - 1); !ok {
+		return Span{}, ErrOverflow
+	}
+	s := Span{First: p.cursor, Count: n, seg: p.seg}
+	p.cursor += n
+	return s, nil
 }
 
 // Skip moves the cursor past the slots that are due at now without handing

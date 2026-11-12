@@ -13,6 +13,8 @@ import (
 // allocate: share immutable timing data rather than copying it per call.
 type Span struct {
 	First, Count uint64
+
+	seg *segment // timing the span was issued under; nil only for the zero Span
 }
 
 // Time returns the time of slot First+i: the floor of its exact time, in
