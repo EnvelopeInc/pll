@@ -372,6 +372,10 @@ func (f *Follower) Jitter() time.Duration {
 // State returns StateHoldover when now is more than HoldoverAfter past the
 // last accepted sample, and otherwise the lock state.
 func (f *Follower) State(now time.Duration) State {
+	// Holdover (SPEC 2.6) is not built yet; only the lock state is reported.
+	if f.lockRun >= f.cfg.LockCount {
+		return StateLocked
+	}
 	return StateAcquiring
 }
 
