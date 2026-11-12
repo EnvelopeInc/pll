@@ -21,7 +21,14 @@ type Span struct {
 // nanoseconds from the origin. It panics if i >= Count, like an index out of
 // range.
 func (s Span) Time(i uint64) time.Duration {
-	return 0
+	if i >= s.Count {
+		panic("pll: index out of range")
+	}
+	t, ok := s.seg.floorTime(s.First + i)
+	if !ok {
+		panic(ErrOverflow)
+	}
+	return time.Duration(t)
 }
 
 // All yields each slot in the span with its time, in order.

@@ -13,3 +13,6 @@ SPEC.md and pacer_test.go: no disagreement found for this task.
 05: pacer.go: Claim implemented (n=0 and cursor+n overflow checks; last slot's time checked via new segment.floorTime, fast uint64 path + big fallback). span.go: Span gained unexported seg *segment. TestClaim passes; gofmt, vet clean; TestUnitsPerSecond/TestBitsPerSecond/TestRateString/TestNewPacer still pass.
 Next: Span.Time (task 06) should use segment.floorTime(First+i) and panic when i >= Count. ExamplePacer_Claim fails only because Span.Time is still a stub returning 0.
 SPEC.md and pacer_test.go: no disagreement found for this task.
+06: span.go: Time checks i >= Count, uses the captured segment.floorTime(First+i), and panics on overflow; TestSpanTimeNominal, TestSpanTimePanics, TestClaim and ExamplePacer_Claim pass; gofmt and vet clean.
+Next: All/Due/Skip/NextDue/SetTrim remain stubs; full-suite failing test/subtest names fell from 31 to 28 with no new failures (baseline and after logs: /tmp/pll-task06.jYEwvh).
+SPEC.md and tests: no disagreement found for this task.
