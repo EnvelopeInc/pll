@@ -56,9 +56,6 @@ func DefaultFollowerConfig(nominal Rate) FollowerConfig {
 // Follower is a second-order (type-II) phase-locked loop that tracks a remote
 // clock against the local clock from (local time, remote ticks) readings. It
 // is not safe for concurrent use. Construct it with NewFollower.
-//
-// The fields are yours to choose. SPEC.md, part 2, says what state the loop
-// keeps; Observe must not allocate.
 type Follower struct {
 	cfg FollowerConfig // validated configuration
 	pn  float64        // nominal tick period, ns: Den × 1e9 / Num
