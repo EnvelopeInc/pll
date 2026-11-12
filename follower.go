@@ -73,7 +73,7 @@ type Follower struct {
 	ref      time.Duration // local time of the last anchor, step or loop update
 
 	// Reading order (SPEC 2.4.1): the last reading that returned no error.
-	hasPrev    bool
+	// Set by the first reading, so it is valid once anchored.
 	prevLocal  time.Duration
 	prevRemote int64
 
@@ -144,26 +144,145 @@ func (c FollowerConfig) validate() error {
 func (f *Follower) Observe(local time.Duration, remote int64) (Observation, error) {
 	if !f.anchored {
 		f.anchor(local, remote)
-		f.hasPrev, f.prevLocal, f.prevRemote = true, local, remote
+		f.prevLocal, f.prevRemote = local, remote
 		return Observation{Status: StatusAnchored}, nil
 	}
-	// Ordering, windows and the loop are not built yet (SPEC 2.4, 2.5).
-	return Observation{}, nil
+	if local < f.prevLocal || remote <= f.prevRemote {
+		return Observation{}, ErrOrder
+	}
+	// Windows (SPEC 2.4.3) are not built yet: every reading is fed to the loop.
+	obs, err := f.feed(local, remote)
+	if err != nil {
+		return Observation{}, err
+	}
+	f.prevLocal, f.prevRemote = local, remote
+	return obs, nil
 }
 
-// anchor sets the mapping to remote at local time local, with rate offset 0,
-// and resets the loop's sample history (SPEC 2.4.2, 2.5).
+// anchor sets the mapping to remote at local time local, with rate offset 0
+// (SPEC 2.4.2).
 func (f *Follower) anchor(local time.Duration, remote int64) {
 	f.anchored = true
+	f.y = 0
+	f.restart(local, remote)
+}
+
+// restart sets L0 = local and R0 = remote, and clears the lock, jitter and
+// outlier run. The rate offset is left alone (SPEC 2.5.1 step, 2.4.2 anchor).
+func (f *Follower) restart(local time.Duration, remote int64) {
 	f.l0, f.l0frac = local, 0
 	f.r0 = remote
-	f.y = 0
 	f.ref = local
 	f.lastAcc = local
 	f.accepted = 0
 	f.lockRun = 0
 	f.jitterM = 0
 	f.runLen = 0
+}
+
+// feed handles one reading as a sample for the loop (SPEC 2.5.1). An outlier
+// is rejected unless it completes a run of StepAfter agreeing outliers, which
+// steps the clock. A sample that is not an outlier is accepted.
+func (f *Follower) feed(l time.Duration, r int64) (Observation, error) {
+	e := f.phaseError(l, r)
+	obs := Observation{Error: roundDuration(e)}
+	th := float64(f.cfg.OutlierThreshold)
+	if math.Abs(e) > th {
+		if f.runLen > 0 && math.Abs(e-f.runErr) <= th {
+			f.runLen++
+		} else {
+			f.runLen, f.runErr = 1, e
+		}
+		if f.runLen >= f.cfg.StepAfter {
+			f.restart(l, r)
+			obs.Status = StatusStepped
+		} else {
+			obs.Status = StatusRejected
+		}
+		return obs, nil
+	}
+	f.runLen = 0
+	if err := f.accept(l, r, e); err != nil {
+		return Observation{}, err
+	}
+	obs.Status = StatusAccepted
+	return obs, nil
+}
+
+// accept uses a non-outlier sample with phase error e: the loop update (SPEC
+// 2.5.2), then lock (2.5.3) and jitter (2.5.4). It changes nothing when the
+// new anchor does not fit in a time.Duration.
+func (f *Follower) accept(l time.Duration, r int64, e float64) error {
+	y, l0, frac, r0, ref := f.y, f.l0, f.l0frac, f.r0, f.ref
+	if dt := nanosBetween(l, f.ref) / 1e9; dt > 0 {
+		wn := f.wn
+		x := wn * math.Min(dt, 1/(2*wn))
+		kp := math.Min(1, 2*f.cfg.Damping*x)
+		pred := f.predictFrom(r) // L̂_old(r) − L0, before y changes
+		maxY := f.cfg.MaxOffsetPPM * 1e-6
+		y = min(max(f.y-(x*x/dt)*e/1e9, -maxY), maxY)
+		v := pred + kp*e
+		ns := math.Round(v)
+		var err error
+		if l0, err = addNanos(f.l0, ns); err != nil {
+			return err
+		}
+		frac = v - ns
+		r0, ref = r, l
+	}
+	f.y, f.l0, f.l0frac, f.r0, f.ref = y, l0, frac, r0, ref
+
+	if math.Abs(e) <= float64(f.cfg.LockThreshold) {
+		f.lockRun = min(f.lockRun+1, f.cfg.LockCount)
+	} else {
+		f.lockRun = 0
+	}
+	e2 := e * e
+	if f.accepted == 0 {
+		f.jitterM = e2
+	} else {
+		f.jitterM += (e2 - f.jitterM) / 16
+	}
+	f.accepted = min(f.accepted+1, 2)
+	f.lastAcc = l
+	return nil
+}
+
+// phaseError returns the phase error e = l − L̂(r) of reading (l, r), in ns.
+func (f *Follower) phaseError(l time.Duration, r int64) float64 {
+	return nanosBetween(l, f.l0) - f.predictFrom(r)
+}
+
+// predictFrom returns L̂(r) − L0 in ns, including the fraction of L0.
+func (f *Follower) predictFrom(r int64) float64 {
+	var ticks float64
+	if d, ok := subInt64(r, f.r0); ok {
+		ticks = float64(d)
+	} else {
+		ticks = float64(r) - float64(f.r0)
+	}
+	return ticks*f.pn/(1+f.y) + f.l0frac
+}
+
+// nanosBetween returns a − b in ns as a float64, exact when it fits in int64.
+func nanosBetween(a, b time.Duration) float64 {
+	if d, ok := subInt64(int64(a), int64(b)); ok {
+		return float64(d)
+	}
+	return float64(a) - float64(b)
+}
+
+// roundDuration rounds ns to the nearest nanosecond, saturating at the
+// limits of time.Duration.
+func roundDuration(ns float64) time.Duration {
+	r := math.Round(ns)
+	switch {
+	case r >= 1<<63:
+		return math.MaxInt64
+	case r < -(1 << 63):
+		return math.MinInt64
+	}
+	return time.Duration(r)
 }
 
 // Local maps remote ticks to local time, rounded to the nearest nanosecond.
