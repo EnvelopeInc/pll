@@ -1,6 +1,7 @@
 package pll
 
 import (
+	"fmt"
 	"iter"
 	"time"
 )
@@ -22,7 +23,7 @@ type Span struct {
 // range.
 func (s Span) Time(i uint64) time.Duration {
 	if i >= s.Count {
-		panic("pll: index out of range")
+		panic(fmt.Sprintf("pll: Span.Time index %d out of range [0:%d]", i, s.Count))
 	}
 	t, ok := s.seg.floorTime(s.First + i)
 	if !ok {
