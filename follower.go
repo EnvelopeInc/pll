@@ -150,10 +150,34 @@ func (f *Follower) Observe(local time.Duration, remote int64) (Observation, erro
 	if local < f.prevLocal || remote <= f.prevRemote {
 		return Observation{}, ErrOrder
 	}
-	// Windows (SPEC 2.4.3) are not built yet: every reading is fed to the loop.
-	obs, err := f.feed(local, remote)
-	if err != nil {
-		return Observation{}, err
+	obs := Observation{Status: StatusPending}
+	if f.cfg.Window == 0 {
+		var err error
+		obs, err = f.feed(local, remote)
+		if err != nil {
+			return Observation{}, err
+		}
+	} else if !f.winOpen || uint64(local)-uint64(f.winStart) >= uint64(f.cfg.Window) {
+		// Ordered local times make this unsigned difference exact, even
+		// when start + Window or the signed difference would overflow.
+		if f.winOpen {
+			// The mapping has not changed since the candidate arrived, so
+			// feed computes the same phase error. Commit only on success.
+			next := *f
+			var err error
+			obs, err = next.feed(f.candLocal, f.candRemote)
+			if err != nil {
+				return Observation{}, err
+			}
+			*f = next
+		}
+		f.winOpen, f.winCand = true, true
+		f.winStart = local
+		f.candLocal, f.candRemote = local, remote
+		// Use the mapping after the flush for the new window's errors.
+		f.candErr = f.phaseError(local, remote)
+	} else if e := f.phaseError(local, remote); e < f.candErr {
+		f.candLocal, f.candRemote, f.candErr = local, remote, e
 	}
 	f.prevLocal, f.prevRemote = local, remote
 	return obs, nil

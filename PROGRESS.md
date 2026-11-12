@@ -55,3 +55,6 @@ SPEC.md and follower_test.go: no disagreement found for this task.
 31: follower.go: Jitter returns 0 until two samples are accepted, else round(√jitterM) (the accept path already maintained jitterM). TestJitter passes; gofmt and vet clean; full suite 64 pass/5 fail -> 65 pass/4 fail, no pass->fail (remaining: TestWindow, TestLockAndHoldover, TestReset, TestScenarios).
 Next: Reset (forget everything incl. y, prevLocal/prevRemote, window, outlier run) and holdover in State are still unbuilt; Window (2.4.3) is also unbuilt.
 SPEC.md and follower_test.go: no disagreement found for this task.
+32: follower.go: Observe implements lower-envelope windows with strictly smaller arrival errors, zero-error pending results, overflow-safe boundaries, and transactional candidate flushing before opening the next window. TestWindow passes; gofmt -l . empty; go vet ./... clean.
+Next: Reset and holdover in State remain unbuilt; full suite 65 pass/4 fail -> 67 pass/2 fail (TestLockAndHoldover, TestReset), no passing-test regressions; TestScenarios now passes. Logs: /tmp/pll-task32.ZuKzAw (baseline/final logs and JSON, comparison.log, validation logs/exits).
+SPEC.md and tests: no disagreement found for this task; the previously recorded Observe ErrOverflow contract gap remains unchanged.
