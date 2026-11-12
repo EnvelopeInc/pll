@@ -357,7 +357,7 @@ func addNanos(base time.Duration, ns float64) (time.Duration, error) {
 
 // Offset returns the estimated fractional rate offset y: the remote clock
 // runs at nominal × (1 + y) as measured by the local clock.
-func (f *Follower) Offset() float64 { return 0 }
+func (f *Follower) Offset() float64 { return f.y }
 
 // Trim returns round(y × 1e12), ready for Pacer.SetTrim.
 func (f *Follower) Trim() int64 { return 0 }

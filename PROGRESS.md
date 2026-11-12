@@ -46,3 +46,6 @@ SPEC.md and follower_test.go: no disagreement found for this task beyond that Er
 25: follower.go: State returns StateLocked once lockRun reaches LockCount, else StateAcquiring (holdover not built; left to task 251). TestPerfectClock passes; gofmt, vet clean; no pass->fail vs HEAD (52 -> 55 PASS, baseline /tmp/base25; newly pass TestOutliers, TestFollowerAllocs too).
 Next: Offset/Trim/Jitter/Reset are still stubs and State ignores HoldoverAfter; the rate-offset and jitter tasks come next. Reset must also clear lockRun/accepted (already done via restart) and y/prevLocal.
 SPEC.md and follower_test.go: no disagreement found for this task.
+26: follower.go: Offset returns the existing loop estimate f.y; capped-gain loop update already matched SPEC 2.5. TestLoopEquations passes; gofmt -l . empty and go vet ./... passes.
+Next: Trim remains a stub; TestTrim already failed at baseline (negative-trim check), now fails earlier at round(Offset × 1e12) = -3948. No SPEC/test disagreement found; no next-task implementation.
+Validation: full suite exits 1 before/after; 55 pass/14 fail -> 61 pass/8 fail, no formerly passing tests fail and no newly failing tests. Logs: /tmp/pll-task26.0eoJfB (baseline.json, final.json, comparison.log and check logs/exits).
