@@ -24,10 +24,10 @@ The package never reads a clock, starts a goroutine or touches your data. You pa
 
 | | |
 |---|---|
-| Version | v0.1.0 |
+| Version | v0.3.0 |
 | Go | 1.23 or newer; standard library only |
 | License | MIT |
-| Install | `go get github.com/version2beta/pll@v0.1.0` |
+| Install | `go get github.com/version2beta/pll@v0.3.0` |
 | Repository | [github.com/version2beta/pll](https://github.com/version2beta/pll) |
 | API reference | [pkg.go.dev/github.com/version2beta/pll](https://pkg.go.dev/github.com/version2beta/pll) |
 

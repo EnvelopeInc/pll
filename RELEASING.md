@@ -14,7 +14,7 @@ The module is `github.com/version2beta/pll`; the repository is
 ## Publish
 
 ```sh
-v=v0.1.0
+v=v0.3.0
 git tag -a "$v" -m "pll $v"
 git push origin "$v"
 gh release create "$v" --title "pll $v" --notes-file <(awk "/^## $v /{f=1;next} /^## /{f=0} f" CHANGELOG.md)

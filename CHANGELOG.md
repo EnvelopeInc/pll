@@ -2,9 +2,9 @@
 
 One entry per released version, newest first.
 
-## v0.1.0 — 2026-11-12
+## v0.3.0 — 2026-11-12
 
-The first release under `github.com/version2beta/pll`.
+The first release under `github.com/version2beta/pll`. Version numbers below v0.3.0 belong to an earlier, withdrawn API and do not build under this module path.
 
 - `Rate`: an exact number of units per second, from `UnitsPerSecond` or `BitsPerSecond`.
 - `Pacer`: evenly spaced, numbered slots at an exact rate, with `Due`, `Claim`, `Skip`, `NextDue` and a trim in parts per trillion. Times never drift and the hot paths do not allocate.
