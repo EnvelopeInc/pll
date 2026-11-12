@@ -16,3 +16,6 @@ SPEC.md and pacer_test.go: no disagreement found for this task.
 06: span.go: Time checks i >= Count, uses the captured segment.floorTime(First+i), and panics on overflow; TestSpanTimeNominal, TestSpanTimePanics, TestClaim and ExamplePacer_Claim pass; gofmt and vet clean.
 Next: All/Due/Skip/NextDue/SetTrim remain stubs; full-suite failing test/subtest names fell from 31 to 28 with no new failures (baseline and after logs: /tmp/pll-task06.jYEwvh).
 SPEC.md and tests: no disagreement found for this task.
+08: span.go: All yields (First+i, Time(i)) for i < Count and stops when yield returns false; TestSpanAll and ExampleSpan_All pass; gofmt, vet clean; TestUnitsPerSecond, TestBitsPerSecond, TestRateString, TestNewPacer, TestClaim, TestSpanTime* still pass; remaining failures are only Due/Skip/NextDue/SetTrim-dependent tests (stubs).
+Next: Due, Skip, NextDue and SetTrim are still stubs; they need the largest-due-slot helper (segment.floorTime's inverse) and the ceil-time computation.
+SPEC.md and pacer_test.go: no disagreement found for this task.

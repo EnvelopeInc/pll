@@ -33,5 +33,11 @@ func (s Span) Time(i uint64) time.Duration {
 
 // All yields each slot in the span with its time, in order.
 func (s Span) All() iter.Seq2[uint64, time.Duration] {
-	return func(yield func(uint64, time.Duration) bool) {}
+	return func(yield func(uint64, time.Duration) bool) {
+		for i := uint64(0); i < s.Count; i++ {
+			if !yield(s.First+i, s.Time(i)) {
+				return
+			}
+		}
+	}
 }
