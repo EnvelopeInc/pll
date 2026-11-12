@@ -399,7 +399,13 @@ func (f *Follower) Jitter() time.Duration {
 // State returns StateHoldover when now is more than HoldoverAfter past the
 // last accepted sample, and otherwise the lock state.
 func (f *Follower) State(now time.Duration) State {
-	// Holdover (SPEC 2.6) is not built yet; only the lock state is reported.
+	if f.anchored && now > f.lastAcc {
+		// now - lastAcc, exact as unsigned when now > lastAcc, even when the
+		// signed difference would overflow.
+		if uint64(now)-uint64(f.lastAcc) > uint64(f.cfg.HoldoverAfter) {
+			return StateHoldover
+		}
+	}
 	if f.lockRun >= f.cfg.LockCount {
 		return StateLocked
 	}

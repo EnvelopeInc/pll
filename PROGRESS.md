@@ -58,3 +58,6 @@ SPEC.md and follower_test.go: no disagreement found for this task.
 32: follower.go: Observe implements lower-envelope windows with strictly smaller arrival errors, zero-error pending results, overflow-safe boundaries, and transactional candidate flushing before opening the next window. TestWindow passes; gofmt -l . empty; go vet ./... clean.
 Next: Reset and holdover in State remain unbuilt; full suite 65 pass/4 fail -> 67 pass/2 fail (TestLockAndHoldover, TestReset), no passing-test regressions; TestScenarios now passes. Logs: /tmp/pll-task32.ZuKzAw (baseline/final logs and JSON, comparison.log, validation logs/exits).
 SPEC.md and tests: no disagreement found for this task; the previously recorded Observe ErrOverflow contract gap remains unchanged.
+35: follower.go: State returns StateHoldover when anchored and now - lastAcc > HoldoverAfter (overflow-safe unsigned difference), else the lock state. TestLockAndHoldover passes; gofmt -l . empty, go vet ./... clean; full suite before: TestLockAndHoldover and TestReset failing, now only TestReset fails (68 PASS lines, 1 FAIL line), no pass->fail.
+Next: Reset (task 36) is still a stub and must clear all fields incl. y, prevLocal/prevRemote, window and outlier run; TestReset is the remaining root-package failure.
+SPEC.md and follower_test.go: no disagreement found for this task.
