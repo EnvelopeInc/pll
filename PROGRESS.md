@@ -61,3 +61,6 @@ SPEC.md and tests: no disagreement found for this task; the previously recorded 
 35: follower.go: State returns StateHoldover when anchored and now - lastAcc > HoldoverAfter (overflow-safe unsigned difference), else the lock state. TestLockAndHoldover passes; gofmt -l . empty, go vet ./... clean; full suite before: TestLockAndHoldover and TestReset failing, now only TestReset fails (68 PASS lines, 1 FAIL line), no pass->fail.
 Next: Reset (task 36) is still a stub and must clear all fields incl. y, prevLocal/prevRemote, window and outlier run; TestReset is the remaining root-package failure.
 SPEC.md and follower_test.go: no disagreement found for this task.
+36: follower.go: Reset now sets *f to a zero Follower that keeps only cfg, pn and wn, so every loop, window, order, lock and jitter field is forgotten. TestReset passes; gofmt -l . empty, go vet ./... clean; go test ./... -count=1 passes in full (no FAIL lines, 69 PASS lines).
+Next: all root-package tests now pass, so stage 2 has no failing tests left; check the sim/cmd scenarios if the next task touches them.
+SPEC.md and follower_test.go: no disagreement found for this task.

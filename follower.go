@@ -415,6 +415,9 @@ func (f *Follower) State(now time.Duration) State {
 // Reset forgets every reading, the rate estimate included; the next reading
 // anchors.
 func (f *Follower) Reset() {
+	// Keep only the validated configuration and its derived constants; every
+	// other field is loop state, which Reset forgets (SPEC 2.6).
+	*f = Follower{cfg: f.cfg, pn: f.pn, wn: f.wn}
 }
 
 // Observation reports what Observe did with a reading.
