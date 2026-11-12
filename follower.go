@@ -366,7 +366,10 @@ func (f *Follower) Trim() int64 { return int64(math.Round(f.y * 1e12)) }
 // weighted 1/16 per sample, rounded to the nearest nanosecond. It is 0 until
 // two samples have been accepted since the last anchor, step or Reset.
 func (f *Follower) Jitter() time.Duration {
-	return 0
+	if f.accepted < 2 {
+		return 0
+	}
+	return roundDuration(math.Sqrt(f.jitterM))
 }
 
 // State returns StateHoldover when now is more than HoldoverAfter past the

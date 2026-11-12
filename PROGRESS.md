@@ -52,3 +52,6 @@ Validation: full suite exits 1 before/after; 55 pass/14 fail -> 61 pass/8 fail, 
 30: follower.go: Trim returns round(y × 1e12) via math.Round (y is bounded to ±MaxOffsetPPM×1e-6 < 1, so the result fits int64). TestTrim passes; gofmt, vet clean; full suite 61 pass/8 fail -> 64 pass/5 fail, no pass->fail (baseline from git archive HEAD in /tmp/base30; newly pass ExampleFollower_Trim, TestDeviceSink).
 Next: remaining failures are TestJitter, TestLockAndHoldover, TestReset, TestScenarios, TestWindow (Jitter/Holdover/Reset/Window still stubs or unbuilt).
 SPEC.md and follower_test.go: no disagreement found for this task.
+31: follower.go: Jitter returns 0 until two samples are accepted, else round(√jitterM) (the accept path already maintained jitterM). TestJitter passes; gofmt and vet clean; full suite 64 pass/5 fail -> 65 pass/4 fail, no pass->fail (remaining: TestWindow, TestLockAndHoldover, TestReset, TestScenarios).
+Next: Reset (forget everything incl. y, prevLocal/prevRemote, window, outlier run) and holdover in State are still unbuilt; Window (2.4.3) is also unbuilt.
+SPEC.md and follower_test.go: no disagreement found for this task.
