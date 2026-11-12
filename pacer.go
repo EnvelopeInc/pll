@@ -16,6 +16,7 @@ import (
 // the zero Pacer is not usable.
 type Pacer struct {
 	cursor uint64   // next slot not yet handed out or skipped
+	rate   Rate     // nominal rate, unaffected by trim
 	seg    *segment // current timing; immutable, shared with issued Spans
 }
 
@@ -157,7 +158,7 @@ func NewPacer(r Rate) (*Pacer, error) {
 	if r.num == 0 || r.den == 0 {
 		return nil, ErrInvalidRate
 	}
-	return &Pacer{seg: newSegment(r.num, r.den, 0, 0, 0)}, nil
+	return &Pacer{rate: r, seg: newSegment(r.num, r.den, 0, 0, 0)}, nil
 }
 
 // Due hands out the oldest slots whose exact time is at or before now, at most
@@ -267,6 +268,17 @@ func (p *Pacer) NextDue() (slot uint64, at time.Duration, err error) {
 // when the cursor slot's time exceeds the largest time.Duration. On error
 // nothing changes.
 func (p *Pacer) SetTrim(ppt int64) error {
+	if ppt <= -1_000_000_000_000 || ppt >= 1_000_000_000_000 {
+		return ErrInvalidArgument
+	}
+	if ppt == p.seg.trim {
+		return nil
+	}
+	anchor, ok := p.seg.floorTime(p.cursor)
+	if !ok {
+		return ErrOverflow
+	}
+	p.seg = newSegment(p.rate.num, p.rate.den, p.cursor, anchor, ppt)
 	return nil
 }
 

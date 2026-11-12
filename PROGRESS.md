@@ -28,3 +28,6 @@ SPEC.md and pacer_test.go: no disagreement found for this task.
 12: pacer.go: Skip implemented, reusing segment.latestDue with the same MaxUint64-1 cap as Due; keeps newest `keep` due slots; ErrInvalidArgument for now<0, ErrOverflow when cursor is MaxUint64 and due. TestSkip passes; gofmt, vet clean; no regressions (only SetTrim/Overflow/Boundaries/Differential/Fuzz/Alloc/Example failures remain).
 Next: SetTrim (task 13) is still a stub and is the cause of TestSetTrim, TestSetTrimKeepsSpans, ExamplePacer_SetTrim, and the SetTrim-based TestBoundaries/TestOverflow failures.
 SPEC.md and pacer_test.go: no disagreement found for this task.
+13: pacer.go: SetTrim validates bounds, returns early for unchanged trim, checks floor(cursor time) before replacing the immutable segment, and uses the retained nominal Rate; issued spans stay unchanged. TestSetTrim, gofmt, vet and full suite pass.
+Next: task 13 complete; no previously passing tests regressed (20 passing/17 failing test/subtest results -> 37 passing/0 failing); baseline/final logs and comparison: /tmp/pll-task13.Gq52FQ.
+SPEC.md and tests: no disagreement found for this task.
