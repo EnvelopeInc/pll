@@ -1,63 +1,106 @@
 # pll
 
-`github.com/EnvelopeInc/pll` generates transport-agnostic trigger signals at intervals derived from a target MPEG-TS bitrate, assuming 188-byte packets by default. Packet size is configurable with [`WithPacketSize`](https://pkg.go.dev/github.com/EnvelopeInc/pll#WithPacketSize). External timing events can correct the schedule. It does not read, write, or parse packets, perform transport I/O, or guarantee wire-level timing.
+`github.com/EnvelopeInc/pll` is a deterministic, transport-agnostic virtual-time pacer with an optional synchronous scheduler. It computes unit opportunities from an exact integer bit rate; it does not own payloads or transport I/O, and it does not promise delivery timing.
 
 Requires Go 1.22.2 or newer.
 
-## Install
+## Migration from the withdrawn channel API
 
-```sh
-go get github.com/EnvelopeInc/pll@v0.2.0
-```
+This is a breaking API replacement, not a drop-in upgrade:
 
-## Example
+- Replace `NewPLL(mbps, kp, ki, kd, opts...) *PLL` with `NewPLL(rate, packetSize, options...) (*PLL, error)`. Express the intended rate as exact integer bits/sec (for example, 19.392 Mbps → `19_392_000`) and pass bytes explicitly (`188`, `192`, or `204`); `WithPacketSize` and the default packet size are removed. Handle returned errors instead of constructor panics. No public options currently exist; omit the reserved option argument.
+- Remove PID gains, `Start`, `StartContext`, `Stop`, `TriggerCh`, and `EventCh`. Use deterministic `Advance` with caller-owned elapsed time and availability, or optional synchronous `RunScheduler` with a context, unbuffered availability events, and an acceptance callback. Slot zero is now due at zero, not one period after startup. The caller owns payload buffering, producer shutdown, and channel closure.
+- External correction now uses `NewSynchronizer` and `ReferenceSample`, not boolean events or legacy PID gains. Retain whole emitted snapshots for reference association; reconstructing exported fields or decoding serialized emissions loses required private provenance. `Option`'s signature and external unkeyed `Emission` literals are also breaking changes.
+
+The exact `go.mod` retraction range remains `[v0.0.0-0, v0.2.1]`; the withdrawn versions are not a recommended installation target for this candidate.
+
+## API and contract
 
 ```go
 package main
 
 import (
 	"fmt"
+	"log"
+	"time"
 
 	"github.com/EnvelopeInc/pll"
 )
 
 func main() {
-	p := pll.NewPLL(10, 0, 0, 0) // 10 Mbps; zero PID gains
-	p.Start()
-	fmt.Println(<-p.TriggerCh)
-	p.Stop()
+	p, err := pll.NewPLL(19_392_000, 188) // bits per second, bytes per unit
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	now := time.Duration(0) // elapsed time from the caller's chosen zero origin
+	batch, err := p.Advance(now, 1, 1024) // one unit available, bounded batch
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, emission := range batch.Emissions {
+		fmt.Printf("unit %d, slot %d has virtual time %s\n", emission.UnitIndex, emission.Slot, emission.Timestamp)
+		// The caller consumes exactly len(batch.Emissions) units.
+	}
 }
 ```
 
-For 204-byte packets, configure the constructor with `pll.NewPLL(10, 0, 0, 0, pll.WithPacketSize(204))`.
+`NewPLL(rate, packetSize, options...)` requires positive signed integer bits per second and positive bytes per unit. It returns `(*PLL, error)` for invalid configuration, an unsupported period, a nil option, or an option error. Periods must be at least 1ns and their ceiling-rounded first due deadline must fit `time.Duration`. The variadic functional-option seam is reserved; no public options, PID gains, or autotuning are provided. The nominal rate is authoritative.
 
-## API and behavior
+`VirtualTime(slot)` returns the floor-rounded absolute rational timestamp, in nanoseconds from zero:
 
-- `NewPLL(mbps, kp, ki, kd, opts...)` takes a target decimal megabit-per-second rate. Each PID gain is an integer scaled by 100 (`100` means a factor of 1). It panics for a non-finite or non-positive rate, a nil option, a non-positive packet size, or when the derived packet period is outside the positive `time.Duration` range accepted by timers. The period is truncated to nanoseconds.
-- `WithPacketSize(bytes)` configures packet size in bytes; `NewPLL` panics if the value is zero or negative. The default is 188 bytes. Common sizes are 188 bytes for standard TS, 192 bytes for M2TS/BDAV, and 204 bytes for DVB with Reed-Solomon parity.
-- `Start()` runs the worker; `StartContext(ctx)` runs it until context cancellation or `Stop()`. A nil context panics. A PLL is one-shot: later starts do nothing, even after shutdown. `Stop()` is idempotent, waits for an active worker to exit, and prevents a not-yet-started PLL from starting.
-- `TriggerCh` emits unbuffered `true` signals. The worker can wait for a receiver, but shutdown can interrupt that wait. `EventCh` is an unbuffered input; send one value per external event to use for correction. The bool value is ignored. The first deadline is one packet period after worker start; event timing is compared with that deadline.
-- The PLL owns and closes both channels on shutdown; callers must not close them. Stop event-sender goroutines before calling `Stop()` or canceling the context, since either shutdown path closes `EventCh`. Do not send after shutdown.
-
-## Timing characterization and limitations
-
-The repository includes a bounded, standard-library timing harness:
-
-```sh
-go run ./cmd/pll-timing -mbps 10 -packet-bytes 188 -duration 5s
+```text
+floor(slot * packetSize * 8 * 1e9 / rate)
 ```
 
-For example, use `-packet-bytes 204` for 204-byte packets. It uses zero PID gains and sends no `EventCh` inputs. It timestamps receipt from `TriggerCh` and reports average period/rate error and interval-jitter percentiles. Jitter is the absolute deviation from the observed mean period. Duration is limited to 100ms–30s and storage to one million samples, so a run may stop early at that sample limit. These measurements characterize trigger-channel delivery on the current host only; they do not measure packet transmission or wire timing and are not cross-platform guarantees. Timer resolution, OS scheduling, receiver scheduling, and workload affect results. The worker schedules against absolute deadlines but skips missed intervals instead of emitting catch-up bursts. Tests do not assert a hardware-specific timing tolerance.
+Each time is computed from the slot index, not by repeatedly adding a rounded period, so fractional periods do not accumulate drift. Slot zero is due at the explicit zero origin. `VirtualTime` depends only on the configured rate and unit size.
 
-PID gains are not range-validated. Intermediate arithmetic avoids integer overflow; the integral accumulator saturates at the `int64` bounds and the computed delay is clamped to `[0, period]`. This does not guarantee stable or useful control for any gain choice. Validate behavior on the target host and workload.
+`Advance(now, availableUnits, maxBatch)` takes non-negative elapsed time and an exact snapshot of caller-owned available units. `maxBatch` must be 1 through `MaxBatchSize` (1024). It returns a `Batch` of sequential `UnitIndex` values with absolute schedule `Slot` values and exact virtual timestamps. Consume exactly `len(batch.Emissions)` units. `MoreDue` is true only when more already-due slots can be filled from the remaining available snapshot; call again with the updated availability to drain bounded work. The limit bounds each returned batch; repeated calls at the same time can drain a larger backlog, so the caller controls the aggregate burst by deciding when to request another batch. Excess units beyond the due slots remain caller-owned. If availability is zero, all due slots are skipped without catch-up debt. If availability is less than the due slots, those units are assigned to the latest due slots, skipping earliest opportunities to avoid stale timestamps. Underruns can therefore create gaps in `Slot`; `UnitIndex` advances only when units are emitted. Batches never exceed the requested bound. Due eligibility uses the unrounded rational schedule, not its floor-rounded timestamp: a slot at 8/3ns has timestamp 2ns but is first due at 3ns. Decreasing `now` does not rewind assigned or skipped slots.
 
-## Contributing
+`Emission.Timestamp` is virtual scheduled time, not actual acceptance time. `RunScheduler(ctx, pll, availability, accept, config)` provides optional synchronous real-time scheduling in the caller-owned goroutine. `availability` is an unbuffered channel with one event per caller-owned available unit. The caller owns and closes it after all senders stop; closure signals no more units, and the scheduler drains received pending units before normal return (cancellation or an error can leave pending units). The scheduler never closes the channel. It receives only up to `MaxAvailable`, creating producer backpressure, so producers should select on the same context when sends can block. `RunScheduler` runs synchronously and launches no goroutine; the caller owns any goroutine used to invoke it. The synchronous callback returns nil only when it accepts the emission; errors terminate scheduling without retry because `Advance` already consumed that attempted slot. The result reports accepted and still-pending counts, excluding producer events not yet received. A rejected callback attempt remains in the pending count, even though its slot and unit index have advanced; that PLL must not be resumed after a callback error. Cancellation interrupts timer/input waits; a blocking callback must honor its context. The scheduler owns and stops its timer, but does not own payloads or external buffering. `MaxBurst` bounds aggregate accepted emissions across all `Advance` calls during one timer wake, not across an entire period or across caller buffering. Keep `Emission.Timestamp` separate from a caller-recorded actual acceptance time.
 
-Format Go changes with `gofmt`. Before opening a pull request, run:
+Optional `RuntimeConfig.MeasurePhases` collects phase metrics into the caller-provided `RuntimeConfig.Stats` (`*RuntimeStats`); when disabled, or when no stats pointer is supplied, phase clocks/counters are not sampled. Reference accepted/rejected/pending accounting is independent of `MeasurePhases` and is collected whenever references and a stats pointer are supplied. The stats pointer is reset after configuration validation and must not be concurrently accessed. Timer wake lateness sums actual timer-case handling time minus each scheduled absolute deadline; it is a proxy for timer/runtime/OS wake delay, not pure OS scheduler time. Availability event count includes successfully received unit events (not channel closure), and availability handling duration measures local processing after receive, excluding producer send wait and time blocked waiting for the event. Advance call/time includes the synchronous `PLL.Advance` calls only. Acceptance call/time includes synchronous callback execution, including callback-side work and blocking, but excludes subsequent accounting. Durations are monotonic wall-clock elapsed time, not CPU time. Instrumentation adds clock reads and counter updates on measured paths; use unmeasured runs for throughput baselines and interpret observed deltas as observer-effect-sensitive. It does not allocate per event.
+
+`NewSynchronizer(p, SyncConfig)` creates a deterministic fixed-gain type-II reference controller for one PLL. Calls to `Observe(now, ReferenceSample)` and PLL methods must be serialized by one owner; there are no locks or goroutines. A sample embeds an unmodified library-produced `Emission`, its external `ReferenceTime`, local monotonic `ObservedAt`, and source `Epoch`. References bind to absolute `Emission.Slot` (not `UnitIndex`); explicit `now` validates sample age, while `ObservedAt` must also increase strictly between accepted references. The controller uses `e = (ReferenceTime - referenceEpochAtVirtualZero) - Emission.Timestamp`, `I += Ki*e*dt`, and `qTarget = Kp*e + I`; `dt` is reference-time delta in seconds. Positive error lengthens period: `P=P0*(1+q)`. Gains use Kp s^-1 and Ki s^-2, q is fractional trim; configured clamp and slew bounds are enforced, with conditional integrator freeze at either saturation. Applied trim uses a 1e-12 grid and is quantized inward within the hard and per-reference slew bounds; a sub-grid slew allowance leaves trim unchanged. Lock requires `LockSamples` consecutive valid samples whose absolute phase residual is no greater than `LockTolerance`; errors, epoch resets, and long reference gaps reset lock acquisition. `Status(now)` reports holdover after `MaxSampleAge` without modifying the mapping. A valid reference gap greater than `MaxReferenceInterval` preserves the current bounded trim/timebase, clears integral state, and begins reacquisition rather than repeatedly rejecting later samples. Invalid/stale references never change the clock mapping. Maximum correction and slew settings are limited to 1,000,000 ppm to keep fixed-denominator trim arithmetic bounded. `Emission` carries private provenance snapshots: exported fields remain readable and keyed literals can be used for reporting, but external unkeyed composite literals are no longer source-compatible, and fabricated emissions cannot be submitted as references. Copying the whole value in memory (including through a channel) preserves provenance; JSON/gob or other exported-field serialization does not. Decoded values may be used as reports, not fed back to `Observe`; there is no cross-process or persisted-reference reconstruction API. Provenance validates assignment to this PLL, not physical delivery or the truth of an external reference.
+
+Choose exactly one epoch mode: `ReferenceTimeAtVirtualZero` makes absolute phase observable; `FirstSampleAnchoring` derives the epoch from the first sample, so initial absolute phase is unknowable although relative frequency is trackable. Epoch discontinuities require `ResetEpoch` and reacquisition; known-epoch mode supplies the new epoch's `ReferenceTimeAtVirtualZero` to `ResetEpoch`, while relative mode re-anchors on its next accepted sample. `VirtualTime(slot)` remains the exact nominal query. `ScheduledTime(slot)` queries the corrected schedule and rejects historical slots once a correction has replaced their mapping. Corrections begin at the PLL's next unassigned slot, re-anchoring its exact rational time; emitted timestamps are immutable snapshots. Until the first nonzero applied correction, `ScheduledTime` and `Advance` remain nominal. Only the current correction segment is retained: `ScheduledTime` is prospective, not an archival lookup; retain `Emission.Timestamp` for historical assignments. Missing references leave the bounded trim in holdover; availability does not update synchronization.
+
+When `RuntimeConfig.References` and `RuntimeConfig.Synchronizer` are supplied together, `RunScheduler` receives and applies reference samples on the scheduler-owning goroutine; `RuntimeConfig.Origin` is the shared monotonic time origin for the scheduler and samples. `NewReferenceQueue` creates a bounded mailbox (capacity 1–4096). `Submit` never waits for space and never waits for the queue mutex: it returns an explicit full, closed, canceled, or `ErrReferenceQueueBusy` error. A busy result means the sample was not enqueued, even if capacity is available; callers may retry according to their own policy. The caller owns queue closure and must stop submitters first. If closure is observed while the scheduler is running, it processes already-queued samples, enters holdover, and continues pacing without reference input. Each reference-handler iteration consumes at most the queue capacity, checking cancellation between samples and restoring notification for remaining work. Accepted reference batches refresh the corrected deadline of the existing wake-slot target rather than continually selecting a later slot; continuous reference traffic therefore cannot indefinitely postpone pacing by rearming a fresh future boundary. Construct PLLs with `NewPLL`; their zero value is not usable, and stateful PLLs must not be copied. Use only one active synchronizer per PLL; construction is not an exclusive-registration guard before a correction is applied. Serialize all PLL/synchronizer operations with the scheduler; callbacks may read synchronizer status on that same goroutine but must not reenter `Advance` or mutate synchronization. Queue submission is the concurrent reference-input boundary; never copy a `ReferenceQueue`. These mechanisms do not guarantee physical delivery timing.
+
+`RunScheduler` currently uses exact due slots, a bounded batch size and availability limit, synchronous callback acceptance, and timer wake deadlines; it does not configure an allowable jitter window or guarantee delivery timing. Any future change to its real-time policy must define lateness tolerance, queue capacity, and delivery/backpressure behavior without changing virtual timestamp meaning. `Advance` mutates state and is not safe for concurrent calls on the same `PLL`. Errors include `ErrInvalidConfig`, `ErrInvalidNow`, `ErrInvalidBatchSize`, `ErrTimeOverflow`, and `ErrUnitIndexOverflow`.
+
+## Deterministic schedule sample
+
+`cmd/pll-timing` prints virtual schedule timestamps. It is not a real-time performance or hardware measurement.
 
 ```sh
+go run ./cmd/pll-timing -rate 19392000 -unit-bytes 188 -count 10
+```
+
+## Bounded runtime benchmark
+
+Run the standalone benchmark with `go run ./cmd/pll-bench`. It runs 19.392, 40, and 100 Mbps at 188 bytes, sequentially in idle and CPU-loaded modes. Defaults are six cases of 2 seconds each; `-duration` is bounded to 10 seconds per case and `-cpu-workers` must be 1 through `runtime.NumCPU()` (default: that CPU count). `-rate <bps>` selects one rate (for example `-rate 19392000`); omit it to retain all rates. `-measure-phases` enables scheduler phase metrics; otherwise phase metrics are shown as disabled.
+
+The benchmark producer preloads the slot-0 unit and the first 100ms quota at measured run start, then emits the remaining 100ms quotas on absolute deadlines. Quota counts use exact cumulative rational arithmetic. This initial prefill creates a bounded availability burst; it does not represent individually timed arrivals. Configured duration must be a multiple of 100ms; total generated units are `floor(rate*duration/unitBits)+1`, including slot 0, without adding a full extra 100ms quota. Scheduler callback timestamps are actual acceptance observations; virtual timestamps come from `Emission.Timestamp`. The reported signed virtual-to-actual lateness is `actual acceptance time - benchmark call-start - virtual timestamp`; its origin is the benchmark's immediately-before-call monotonic timestamp, so call-entry overhead is included. This is an estimate, not proof of individual slot deadlines. Runtime scheduling is 10ms wake-batched release, not per-unit deadline pacing. Aggregate accepted bitrate does not establish per-slot on-time delivery.
+
+Rolling 100ms/500ms errors use sliding windows ending at each accepted timestamp after one full window from benchmark start. Each window counts acceptances in `(end-window, end]`; reported min/mean/p95/max summarize those complete windows. Maximum actual burst is the maximum number of acceptances within any inclusive 1ms interval. Deficit compares nominal cumulative opportunities from benchmark start (including slot 0) with accepted units; temporary maximum is sampled after acceptances and at run end, with its time, final deficit, and subsequent recovery (first return to non-positive after a strictly positive global maximum) reported. A peak between acceptance samples may be higher. CPU utilization is estimated as Go runtime total CPU time minus idle CPU time, divided by wall time; runtime metrics are estimates and utilization may exceed 100% across cores. Allocation deltas use `runtime.ReadMemStats`. `producer_send_wait_total` sums all unbuffered availability-send durations (including channel handoff); `producer_blocked_duration` and `producer_blocked_count` include only send calls taking longer than 1ms. `underflow` reports scheduler underrun as skipped absolute scheduler slots, not producer supply: compare generated/offered/sent counts for producer supply and producer blocking, and `input_backpressure` for blocked producer sends or pending scheduler units. No performance guarantee is implied.
+
+## Application-shaped integration exercise
+
+Run `go run ./cmd/pll-integration` for nine 10-second simulated producer → scheduler → bounded consumer-queue → consumer cases. `-seconds` accepts 10–12 seconds per scenario, bounding nominal total scenario time to 108 seconds; queue capacity is also bounded by CLI validation. The matrix covers continuous nominal and exact cumulative 100ms-burst producers, ±100ppm producer offsets, consumer delay and one bounded stall, an independent synthetic jittered reference with interruption/recovery, and separate moderate/substantial CPU contention. Contention worker counts derive from `runtime.GOMAXPROCS(0)`: moderate uses about one quarter, substantial all but one. `-cpu-worker-limit` optionally caps that basis (1 through GOMAXPROCS; default GOMAXPROCS); each output prints actual GOMAXPROCS and worker count.
+
+Each report separates scheduler enqueue from consumer acceptance timestamps. In free-run scenarios, delivery lateness, rolling-window, and deficit metrics use an origin captured immediately before `RunScheduler`; because the scheduler establishes its own origin on entry, this pre-call measurement origin includes call-entry overhead. Reference scenarios retain the shared `RuntimeConfig.Origin` used by scheduler and `ObservedAt`. Free-run emission timestamps are checked against exact `PLL.VirtualTime`; corrected-reference runs are labeled separately. Accepted bitrate is consumer-accepted count divided by scenario wall time. Sliding delivery-rate errors use 100ms/500ms windows on a fixed 10ms endpoint grid, counting arrivals in `(end-window,end]`; distribution summaries include worst absolute window error. Deficit/recovery compares delivery to nominal cumulative application opportunities including slot 0. Producer expected counts also include slot 0; offered/sent/blocking and shortfall are producer measurements. Slot gaps are a delivery-slot proxy and cannot by themselves distinguish source starvation from scheduler lateness. Queue high-water is measured under the queue lock; enqueue wait and enqueue-to-consumer-accept delay are reported separately. Scheduler returned accepted/pending counts and wake-lateness measurements are not pass/fail criteria.
+
+CPU is a process-wide Go runtime estimate and includes producer, scheduler, consumer, and any contention goroutines; it is not scheduler-attributed. Allocation deltas are whole-process `runtime.MemStats` measurements. The reference source runs on its own monotonic 10ms ticker/goroutine, even without scheduler emissions. It samples a +50ppm rational clock with deterministic ±3µs tick-index jitter and suppresses observations from 4s through 6s. Scheduler callbacks only publish whole genuine emission snapshots (including private provenance) to a single-slot, nonblocking, latest-value mailbox. The source associates a tick with the latest unique snapshot no newer than that tick and at most 20ms old; unmatched/duplicate/interrupted ticks and submission failures are counted. Association projects the independent clock sample to the slot's ideal nominal coordinate, not its corrected PLL timestamp or actual transport time. Thus clock sampling is independent of PLL scheduling decisions, but this ideal slot-coordinate association is still synthetic, not a hardware capture or independent physical clock. The source only submits to the bounded reference queue; all Synchronizer reads remain serialized in scheduler callbacks or after scheduler return. Cancellation stops and joins the source before queue closure. Reference telemetry includes timestamped callback-observed acquisition/lock/holdover/reacquisition transitions, state durations interpolated by holding the last observed state, final trim, and a time-weighted last-1s trim mean with coverage. Transitions can be detected late (or missed) without callbacks; these durations are observation estimates, not exact controller transition times. Callback state counts are separately labeled and are not durations. Run output is host/load dependent and provides no physical transport or delivery guarantee.
+
+## Bounded live synchronization exercise
+
+Run `go run ./cmd/pll-sync-bench` for five 2.1-second scheduler cases, each with idle and two-worker synthetic CPU load. It reports actual callback acceptance rate, scheduled-slot rate, rolling rate and phase error, trim, lock/holdover/recovery observations, reference rejections, and burst statistics. Rate-window summaries use complete 100ms/500ms windows sampled every 10ms of elapsed time, so dense callback bursts do not receive extra weight. Its external reference is an exact rational oscillator model indexed by scheduler slot, not by `Emission.Timestamp`; the model is useful for exercising integration but is not an independently running physical clock. Results are host- and load-dependent and do not establish transport or hardware delivery guarantees.
+
+## Validation
+
+```sh
+go test ./...
 go test -race ./...
 go vet ./...
 ```
-
-Pull requests should explain the user-visible change, include focused tests for behavior changes, and report relevant validation. Keep documentation aligned with the API and its timing limitations. CI runs the race tests and vet on Go 1.22.x and the current stable Go version.

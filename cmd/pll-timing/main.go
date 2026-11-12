@@ -1,120 +1,36 @@
-// Command pll-timing characterizes TriggerCh receive timing on the current host.
+// Command pll-timing prints a bounded deterministic virtual-time schedule sample.
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
-	"math"
 	"os"
-	"sort"
-	"time"
 
 	"github.com/EnvelopeInc/pll"
 )
 
-const (
-	maxDuration = 30 * time.Second
-	maxSamples  = 1_000_000
-)
+const maxEmissions = 1_000_000
 
 func main() {
-	rate := flag.Float64("mbps", 0, "target bitrate in decimal Mbps (required)")
-	packetBytes := flag.Int("packet-bytes", 188, "packet size in bytes")
-	duration := flag.Duration("duration", 5*time.Second, "measurement duration (100ms to 30s)")
+	rate := flag.Int64("rate", 19_392_000, "target bitrate in exact bits per second")
+	unitBytes := flag.Int64("unit-bytes", 188, "unit size in bytes")
+	count := flag.Uint64("count", 10, "number of virtual timestamps to print (1 to 1,000,000)")
 	flag.Parse()
-	if *rate <= 0 || math.IsNaN(*rate) || math.IsInf(*rate, 0) {
-		fatal("-mbps must be finite and positive")
-	}
-	if *packetBytes <= 0 {
-		fatal("-packet-bytes must be positive")
-	}
-	if *duration < 100*time.Millisecond || *duration > maxDuration {
-		fatal("-duration must be between 100ms and 30s")
-	}
 
-	packetBits := float64(*packetBytes) * 8
-	periodNanos := packetBits / (*rate * 1e6) * 1e9
-	if math.IsInf(periodNanos, 0) || periodNanos < 1 || periodNanos >= float64(math.MaxInt64) {
-		fatal("-mbps and -packet-bytes produce a period outside the valid time.Timer range")
+	if *count == 0 || *count > maxEmissions {
+		fatal("-count must be between 1 and 1,000,000")
 	}
-	period := time.Duration(periodNanos)
-	pll := pll.NewPLL(*rate, 0, 0, 0, pll.WithPacketSize(*packetBytes))
-	ctx, cancel := context.WithCancel(context.Background())
-	pll.StartContext(ctx)
-
-	timestamps := make([]time.Time, 0, 4096)
-	started := time.Now()
-	timer := time.NewTimer(*duration)
-	defer timer.Stop()
-	truncated := false
-	collecting := true
-	for collecting {
-		select {
-		case _, ok := <-pll.TriggerCh:
-			if !ok {
-				collecting = false
-				break
-			}
-			timestamps = append(timestamps, time.Now())
-			if len(timestamps) == maxSamples {
-				truncated = true
-				collecting = false
-			}
-		case <-timer.C:
-			collecting = false
+	p, err := pll.NewPLL(*rate, *unitBytes)
+	if err != nil {
+		fatal(err.Error())
+	}
+	for slot := uint64(0); slot < *count; slot++ {
+		timestamp, err := p.VirtualTime(slot)
+		if err != nil {
+			fatal(err.Error())
 		}
+		fmt.Printf("slot=%d virtual=%s\n", slot, timestamp)
 	}
-	elapsed := time.Since(started)
-	cancel()
-	pll.Stop() // Wait for the worker, including any blocked TriggerCh send, to exit.
-
-	printReport(*rate, *packetBytes, period, elapsed, timestamps, truncated)
-}
-
-func printReport(targetMbps float64, packetBytes int, expected time.Duration, elapsed time.Duration, timestamps []time.Time, truncated bool) {
-	fmt.Println("PLL TriggerCh channel-receive timing characterization (current OS/hardware only)")
-	fmt.Println("Not wire-level proof and not a cross-platform timing guarantee.")
-	fmt.Printf("target: %.6g Mbps | packet size: %d bytes | expected period: %s | elapsed: %s | samples: %d", targetMbps, packetBytes, expected, elapsed.Round(time.Microsecond), len(timestamps))
-	if truncated {
-		fmt.Print(" (sample limit reached; stopped early)")
-	}
-	fmt.Println()
-	if len(timestamps) < 2 {
-		fmt.Println("insufficient samples for period and jitter summaries")
-		return
-	}
-
-	intervals := make([]time.Duration, 0, len(timestamps)-1)
-	for i := 1; i < len(timestamps); i++ {
-		intervals = append(intervals, timestamps[i].Sub(timestamps[i-1]))
-	}
-	observed := time.Duration(timestamps[len(timestamps)-1].Sub(timestamps[0]).Nanoseconds() / int64(len(intervals)))
-	if observed <= 0 {
-		fmt.Println("could not compute a positive observed period")
-		return
-	}
-	observedMbps := (float64(packetBytes) * 8) / observed.Seconds() / 1e6
-	fmt.Printf("observed average period: %s | average-rate error: %+.4f%%\n", observed, (observedMbps/targetMbps-1)*100)
-
-	jitters := make([]time.Duration, len(intervals))
-	for i, interval := range intervals {
-		jitters[i] = interval - observed
-		if jitters[i] < 0 {
-			jitters[i] = -jitters[i]
-		}
-	}
-	sort.Slice(jitters, func(i, j int) bool { return jitters[i] < jitters[j] })
-	fmt.Printf("interval jitter (absolute deviation from observed mean): min %s | median %s | p95 %s | p99 %s | max %s\n",
-		jitters[0], percentile(jitters, .50), percentile(jitters, .95), percentile(jitters, .99), jitters[len(jitters)-1])
-}
-
-func percentile(sorted []time.Duration, p float64) time.Duration {
-	index := int(math.Ceil(p*float64(len(sorted)))) - 1
-	if index < 0 {
-		index = 0
-	}
-	return sorted[index]
 }
 
 func fatal(message string) {

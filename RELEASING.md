@@ -7,7 +7,7 @@ This repository publishes the Go module `github.com/EnvelopeInc/pll`.
 - Start from a clean, up-to-date `main` checkout; release only reviewed changes.
 - Confirm CI is green on `main` for both Go matrix versions.
 - Choose a Go-compatible semantic version. While the API is unstable, use `v0.x.y`; use `v1.0.0` when committing to a stable v1 API. Increment the appropriate component for the change.
-- Before declaring a stable v1 API, validate measured pacing accuracy with representative MPEG-TS workloads and review the PID gain and overflow limitations documented in the README.
+- Before declaring a stable v1 API, validate measured pacing accuracy with representative workloads and review the fixed-gain type-II synchronizer behavior, exact rational pacing arithmetic, and documented limits: periods below 1ns are unsupported, virtual timestamps must fit `time.Duration`, scheduler work/backpressure is bounded, and callbacks must honor cancellation. Do not describe or depend on a removed PID implementation.
 
 ## Publish a release
 

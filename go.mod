@@ -2,6 +2,10 @@ module github.com/EnvelopeInc/pll
 
 go 1.22.2
 
+// All existing releases are withdrawn pending a corrected transport-agnostic API.
+// v0.2.1 exists solely to publish this retraction notice.
+retract [v0.0.0-0, v0.2.1]
+
 require github.com/stretchr/testify v1.9.0
 
 require (
