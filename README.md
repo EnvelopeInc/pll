@@ -71,7 +71,7 @@ at 10ms: 480 due, slots 1 to 480
 at 25ms: 720 due, slots 481 to 1200
 ```
 
-In a real program `now` is `time.Since(start)`. A late wake-up loses nothing: the overdue slots come back together. `span.Time(i)` is each slot's exact scheduled time, and `p.NextDue()` says when the next slot falls due.
+In a real program `now` is `time.Since(start)`. A late wake-up loses nothing: the overdue slots come back together. `span.Time(i)` is each slot's scheduled time, rounded down to whole nanoseconds, and `p.NextDue()` says when the next slot falls due.
 
 ## Examples
 
