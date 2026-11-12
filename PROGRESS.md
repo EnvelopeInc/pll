@@ -22,3 +22,6 @@ SPEC.md and pacer_test.go: no disagreement found for this task.
 09: pacer.go: NextDue returns cursor and ceil(T(cursor)) via new segment.ceilTime (uint64 fast path with bits.Div64 plus remainder round-up, big.Int fallback); ErrOverflow at MaxUint64 or unfit time. TestNextDue passes; gofmt, vet clean; other tests still fail only in Due/SetTrim/Skip stubs (TestOverflow, TestBoundaries, TestDifferential, TestDue*, TestSkip, TestSetTrim*, Fuzz, Alloc, Example*).
 Next: Due (task 10) should reuse the largest-due-slot logic: S + floor((now-A)*pd/pn) capped at MaxUint64; ceilTime and floorTime are the model for the new helper.
 SPEC.md and pacer_test.go: no disagreement found for this task.
+10: pacer.go: Due implemented via new segment.latestDue (largest due slot = start + floor((now-anchor)*pd/pn), uint64 fast path with bits.Div64, big.Int fallback, capped at MaxUint64); overflow when cursor is MaxUint64 and due. TestDue, TestDueLimits, ExamplePacer_Due pass; gofmt, vet clean; no previously passing test regressed (12 -> 18 passing).
+Next: Skip (task 11) can reuse latestDue: D = latest - cursor + 1 when latest >= cursor; Skip/SetTrim/Overflow/Boundaries/Differential/Fuzz still fail as stubs.
+SPEC.md and pacer_test.go: no disagreement found for this task.

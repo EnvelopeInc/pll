@@ -119,6 +119,38 @@ func (g *segment) ceilTime(s uint64) (int64, bool) {
 	return int64(q) + g.anchor, true
 }
 
+// latestDue returns the largest slot s >= g.start whose exact time is at or
+// before now, capped at math.MaxUint64. It returns false when even slot
+// g.start is not yet due. now must not be negative.
+func (g *segment) latestDue(now int64) (uint64, bool) {
+	if now < g.anchor {
+		return 0, false
+	}
+	d := uint64(now - g.anchor) // not negative, and fits in a uint64
+	var k uint64                // slots after g.start that are due
+	if g.small {
+		// k = floor(d × pd / pn). When the high word reaches pn the quotient
+		// is at least 2^64, so the slot is beyond the cap.
+		hi, lo := bits.Mul64(d, g.pd)
+		if hi >= g.pn {
+			return math.MaxUint64, true
+		}
+		k, _ = bits.Div64(hi, lo, g.pn)
+	} else {
+		t := new(big.Int).SetUint64(d)
+		t.Mul(t, g.bigPd)
+		t.Quo(t, g.bigPn) // d and the period are not negative, so Quo is floor
+		if !t.IsUint64() {
+			return math.MaxUint64, true
+		}
+		k = t.Uint64()
+	}
+	if k > math.MaxUint64-g.start {
+		return math.MaxUint64, true
+	}
+	return g.start + k, true
+}
+
 // NewPacer returns a Pacer for rate r with no trim. An invalid Rate returns
 // nil and ErrInvalidRate.
 func NewPacer(r Rate) (*Pacer, error) {
@@ -137,7 +169,26 @@ func NewPacer(r Rate) (*Pacer, error) {
 // cursor has reached math.MaxUint64 and that slot is due. On error nothing
 // changes.
 func (p *Pacer) Due(now time.Duration, max uint64) (Span, error) {
-	return Span{}, nil
+	if now < 0 || max == 0 {
+		return Span{}, ErrInvalidArgument
+	}
+	last, ok := p.seg.latestDue(int64(now))
+	if !ok || last < p.cursor {
+		return Span{First: p.cursor, Count: 0, seg: p.seg}, nil
+	}
+	if p.cursor == math.MaxUint64 {
+		return Span{}, ErrOverflow // slot MaxUint64 is due and cannot be handed out
+	}
+	if last == math.MaxUint64 {
+		last-- // MaxUint64 is never handed out
+	}
+	n := last - p.cursor + 1
+	if n > max {
+		n = max
+	}
+	s := Span{First: p.cursor, Count: n, seg: p.seg}
+	p.cursor += n
+	return s, nil
 }
 
 // Claim hands out the next n slots whether or not they are due, and moves the
