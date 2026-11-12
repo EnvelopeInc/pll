@@ -1,11 +1,9 @@
 # pll specification
 
-This file is binding for the build loop. Where it and a test disagree, the
-test decides; record the disagreement in PROGRESS.md.
-
-The design document behind it lives outside the repository. Part 1 covers
-`Rate`, `Pacer` and `Span`, built in stage 1. Part 2 covers the `Follower`,
-built in stage 2.
+The exact behavior of package `pll`. Part 1 covers `Rate`, `Pacer` and
+`Span`; part 2 covers the `Follower`. The tests check what is written here;
+[TESTING.md](https://github.com/Version2beta/pll/blob/main/TESTING.md)
+says which test checks what.
 
 ## Part 1. The pacer
 
@@ -18,16 +16,6 @@ The package keeps time; it never touches payloads. It never reads a clock,
 starts a goroutine, sleeps, or does I/O. Every call that depends on the
 present takes `now time.Duration`, elapsed from an origin the caller chooses.
 Values are not safe for concurrent use.
-
-Files:
-
-| File | State |
-| --- | --- |
-| `doc.go`, `errors.go`, `follower_errors.go`, `status.go` | Complete; do not change |
-| `internal/sim/`, `cmd/pllsim/` | Complete; do not change |
-| `rate.go`, `pacer.go`, `span.go` | Built in stage 1; change only if a part 2 task needs it |
-| `follower.go` | Exported API fixed; bodies and unexported fields are yours |
-| `*_test.go`, `testdata/` | The definition of done; do not change |
 
 ### 1.2 Rate
 
@@ -122,7 +110,7 @@ segment it was issued under: a later `SetTrim` never changes its times.
 
 ### 1.6 Arithmetic
 
-Results must be exact for every input, including rates with 64-bit numerators
+Results are exact for every input, including rates with 64-bit numerators
 and denominators, trims at ±(10^12 − 1), slot indexes near `2^64` and times
 near `math.MaxInt64`. Products such as `(s − S) × den × 10^21` exceed 128
 bits, so:
@@ -143,19 +131,19 @@ formula in 1.3; the tests compare against it.
 ### 1.7 Allocation
 
 For everyday rates (num and den below 2^32) with or without a trim of ±50 ppm,
-`Due`, `Claim`, `Skip`, `NextDue`, `Span.Time` must not allocate. Hold the
-segment as an immutable value made once per `NewPacer` or `SetTrim`, and let
+`Due`, `Claim`, `Skip`, `NextDue` and `Span.Time` do not allocate. The
+segment is an immutable value made once per `NewPacer` or `SetTrim`, and
 spans share it.
 
 ### 1.8 Errors
 
-`errors.go` defines them; return these values (callers use `errors.Is`).
+Match them with `errors.Is`.
 
 | Error | When |
 | --- | --- |
 | `ErrInvalidRate` | Zero numerator or denominator, including the zero `Rate` |
 | `ErrInvalidArgument` | `now < 0`, `max` or `n` is 0, or a trim out of range |
-| `ErrOverflow` | A slot index or slot time that does not fit, as above |
+| `ErrOverflow` | A slot index or slot time that does not fit, as above; in part 2, a mapping or anchor that does not fit |
 
 ## Part 2. The follower
 
@@ -229,10 +217,12 @@ positive when the reading arrived later than predicted.
    greater than the previous reading's, returns `ErrOrder` and changes
    nothing. Readings may share a local time. Previous means the last reading
    that did not return an error, whatever its status.
-2. **Anchoring.** The first reading since `NewFollower` or `Reset` sets
+2. **Overflow.** If feeding a sample would move the anchor beyond the range of
+   `time.Duration`, `Observe` returns `ErrOverflow` and changes nothing.
+3. **Anchoring.** The first reading since `NewFollower` or `Reset` sets
    `L0 = local`, `R0 = remote`, and returns `StatusAnchored` with `Error` 0.
    The rate offset is 0 after `NewFollower` and `Reset`.
-3. **Window.** With `Window == 0`, every later reading is fed to the loop
+4. **Window.** With `Window == 0`, every later reading is fed to the loop
    (2.5) and `Observe` returns the result. With `Window > 0`:
     - If no window is open, the reading opens one starting at its `local`,
       becomes the window's candidate, and returns `StatusPending`.
@@ -300,7 +290,7 @@ and set the state to `StateAcquiring`.
 
 ### 2.7 Allocation
 
-`Observe`, `Local`, `Remote`, `Jitter`, `Trim` and `State` must not allocate.
+`Observe`, `Local`, `Remote`, `Jitter`, `Trim` and `State` do not allocate.
 
 ### 2.8 The simulator
 

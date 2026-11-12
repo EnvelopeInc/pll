@@ -56,9 +56,6 @@ func DefaultFollowerConfig(nominal Rate) FollowerConfig {
 // Follower is a second-order (type-II) phase-locked loop that tracks a remote
 // clock against the local clock from (local time, remote ticks) readings. It
 // is not safe for concurrent use. Construct it with NewFollower.
-//
-// The fields are yours to choose. SPEC.md, part 2, says what state the loop
-// keeps; Observe must not allocate.
 type Follower struct {
 	cfg FollowerConfig // validated configuration
 	pn  float64        // nominal tick period, ns: Den × 1e9 / Num
@@ -80,7 +77,6 @@ type Follower struct {
 	// Window (SPEC 2.4.3). Unused when cfg.Window is 0.
 	winOpen    bool
 	winStart   time.Duration
-	winCand    bool // whether a candidate is held
 	candLocal  time.Duration
 	candRemote int64
 	candErr    float64 // phase error of the candidate, ns
@@ -139,8 +135,9 @@ func (c FollowerConfig) validate() error {
 
 // Observe feeds one reading: the remote clock showed remote ticks at local
 // time local. It returns what happened to the reading and, for a sample fed to
-// the loop, its phase error. A reading out of order returns ErrOrder and
-// changes nothing.
+// the loop, its phase error. A reading out of order returns ErrOrder, and a
+// reading whose loop update would move the anchor beyond the range of
+// time.Duration returns ErrOverflow; either way nothing changes.
 func (f *Follower) Observe(local time.Duration, remote int64) (Observation, error) {
 	if !f.anchored {
 		f.anchor(local, remote)
@@ -171,7 +168,7 @@ func (f *Follower) Observe(local time.Duration, remote int64) (Observation, erro
 			}
 			*f = next
 		}
-		f.winOpen, f.winCand = true, true
+		f.winOpen = true
 		f.winStart = local
 		f.candLocal, f.candRemote = local, remote
 		// Use the mapping after the flush for the new window's errors.
