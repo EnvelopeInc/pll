@@ -360,7 +360,7 @@ func addNanos(base time.Duration, ns float64) (time.Duration, error) {
 func (f *Follower) Offset() float64 { return f.y }
 
 // Trim returns round(y × 1e12), ready for Pacer.SetTrim.
-func (f *Follower) Trim() int64 { return 0 }
+func (f *Follower) Trim() int64 { return int64(math.Round(f.y * 1e12)) }
 
 // Jitter returns the root mean square of accepted samples' phase errors,
 // weighted 1/16 per sample, rounded to the nearest nanosecond. It is 0 until
