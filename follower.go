@@ -136,8 +136,9 @@ func (c FollowerConfig) validate() error {
 
 // Observe feeds one reading: the remote clock showed remote ticks at local
 // time local. It returns what happened to the reading and, for a sample fed to
-// the loop, its phase error. A reading out of order returns ErrOrder and
-// changes nothing.
+// the loop, its phase error. A reading out of order returns ErrOrder, and a
+// reading whose loop update would move the anchor beyond the range of
+// time.Duration returns ErrOverflow; either way nothing changes.
 func (f *Follower) Observe(local time.Duration, remote int64) (Observation, error) {
 	if !f.anchored {
 		f.anchor(local, remote)
