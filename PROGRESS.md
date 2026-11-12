@@ -25,3 +25,6 @@ SPEC.md and pacer_test.go: no disagreement found for this task.
 10: pacer.go: Due implemented via new segment.latestDue (largest due slot = start + floor((now-anchor)*pd/pn), uint64 fast path with bits.Div64, big.Int fallback, capped at MaxUint64); overflow when cursor is MaxUint64 and due. TestDue, TestDueLimits, ExamplePacer_Due pass; gofmt, vet clean; no previously passing test regressed (12 -> 18 passing).
 Next: Skip (task 11) can reuse latestDue: D = latest - cursor + 1 when latest >= cursor; Skip/SetTrim/Overflow/Boundaries/Differential/Fuzz still fail as stubs.
 SPEC.md and pacer_test.go: no disagreement found for this task.
+12: pacer.go: Skip implemented, reusing segment.latestDue with the same MaxUint64-1 cap as Due; keeps newest `keep` due slots; ErrInvalidArgument for now<0, ErrOverflow when cursor is MaxUint64 and due. TestSkip passes; gofmt, vet clean; no regressions (only SetTrim/Overflow/Boundaries/Differential/Fuzz/Alloc/Example failures remain).
+Next: SetTrim (task 13) is still a stub and is the cause of TestSetTrim, TestSetTrimKeepsSpans, ExamplePacer_SetTrim, and the SetTrim-based TestBoundaries/TestOverflow failures.
+SPEC.md and pacer_test.go: no disagreement found for this task.

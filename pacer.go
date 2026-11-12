@@ -220,7 +220,23 @@ func (p *Pacer) Claim(n uint64) (Span, error) {
 // Errors: ErrInvalidArgument when now < 0; ErrOverflow when the cursor has
 // reached math.MaxUint64 and that slot is due. On error nothing changes.
 func (p *Pacer) Skip(now time.Duration, keep uint64) (uint64, error) {
-	return 0, nil
+	if now < 0 {
+		return 0, ErrInvalidArgument
+	}
+	last, ok := p.seg.latestDue(int64(now))
+	if !ok || last < p.cursor {
+		return 0, nil // nothing due
+	}
+	if p.cursor == math.MaxUint64 {
+		return 0, ErrOverflow // slot MaxUint64 is due and cannot be passed over
+	}
+	if last == math.MaxUint64 {
+		last-- // MaxUint64 is never handed out, so it is never counted
+	}
+	d := last - p.cursor + 1 // slots Due could hand out at now
+	n := d - min(d, keep)
+	p.cursor += n
+	return n, nil
 }
 
 // NextDue returns the cursor slot and the earliest whole nanosecond at which
