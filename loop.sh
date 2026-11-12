@@ -31,7 +31,7 @@ ESCALATE=${ESCALATE:-"pi -p --provider openai-codex --model gpt-6.1-sol --thinki
 ESCALATE_MAX=${ESCALATE_MAX:-"pi -p --provider openai-codex --model gpt-6.1-sol --thinking max $GUARD"}
 
 # Paths the agent must not change. Anything matching is reverted.
-PROTECTED='(_test\.go$|^pi/|^\.github/|^SPEC\.md$|^tasks\.json$|^PROMPT\.md$|^loop\.sh$|^Makefile$|^go\.mod$|^go\.sum$|^doc\.go$|^errors\.go$|^README\.md$|^LICENSE$|^\.gitignore$)'
+PROTECTED='(_test\.go$|^pi/|^\.github/|^SPEC\.md$|^tasks\.json$|^PROMPT\.md$|^loop\.sh$|^Makefile$|^go\.mod$|^go\.sum$|^doc\.go$|^errors\.go$|^follower_errors\.go$|^status\.go$|^internal/sim/|^cmd/pllsim/|^testdata/|^README\.md$|^LICENSE$|^\.gitignore$)'
 
 STATE=.loop
 mkdir -p "$STATE/attempts" "$STATE/log"

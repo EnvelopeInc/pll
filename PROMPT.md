@@ -5,10 +5,11 @@ earlier iterations; everything you need is in files.
 ## Do this, in order
 
 1. Read `SPEC.md`, then the last 30 lines of `PROGRESS.md`.
-2. Read the task below, the source files it touches (`rate.go`, `pacer.go`,
-   `span.go`), and the test named in the task's test command. The test is
-   the definition of done. `model_test.go` holds the reference model the
-   proof tests compare against.
+2. Read the task below, the source files it touches (`follower.go` for
+   stage 2; `rate.go`, `pacer.go` and `span.go` were built in stage 1), and
+   the test named in the task's test command. The test is the definition of
+   done. `model_test.go` and `followermodel_test.go` hold the reference
+   models the proof tests compare against.
 3. Implement only what this task needs. Keep every exported name, signature
    and doc comment as it is. You may add unexported fields, helpers and
    files. Code that already passes its tests stays as it is unless this task
@@ -27,9 +28,11 @@ earlier iterations; everything you need is in files.
 
 - The test decides. If a test and SPEC.md disagree, make the test pass and
   record the disagreement in PROGRESS.md.
-- Never edit: any `*_test.go` file, `doc.go`, `errors.go`, `SPEC.md`,
-  `tasks.json`, `PROMPT.md`, `loop.sh`, `Makefile`, `go.mod`, `README.md`,
-  `LICENSE`, `.gitignore`, or anything under `pi/` or `.github/`. The loop
+- Never edit: any `*_test.go` file, `doc.go`, `errors.go`,
+  `follower_errors.go`, `status.go`, `SPEC.md`, `tasks.json`, `PROMPT.md`,
+  `loop.sh`, `Makefile`, `go.mod`, `README.md`, `LICENSE`, `.gitignore`, or
+  anything under `internal/sim/`, `cmd/pllsim/`, `testdata/`, `pi/` or
+  `.github/`. The loop
   reverts such edits and counts the iteration as failed. Do not add test
   files of your own.
 - Standard library only. Do not add dependencies.

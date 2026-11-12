@@ -11,7 +11,10 @@ const PROTECTED: RegExp[] = [
   /_test\.go$/,
   /(^|\/)pi\//,
   /(^|\/)\.github\//,
-  /(^|\/)(SPEC\.md|tasks\.json|PROMPT\.md|loop\.sh|Makefile|go\.mod|go\.sum|doc\.go|errors\.go|README\.md|LICENSE|\.gitignore)$/,
+  /(^|\/)internal\/sim\//,
+  /(^|\/)cmd\/pllsim\//,
+  /(^|\/)testdata\//,
+  /(^|\/)(SPEC\.md|tasks\.json|PROMPT\.md|loop\.sh|Makefile|go\.mod|go\.sum|doc\.go|errors\.go|follower_errors\.go|status\.go|README\.md|LICENSE|\.gitignore)$/,
 ];
 
 const FORBIDDEN_GIT = /\bgit\s+(commit|reset|checkout|restore|stash|clean|push|rebase|merge|switch)\b/;

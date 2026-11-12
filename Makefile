@@ -1,4 +1,4 @@
-.PHONY: test verify fmt fuzz bench
+.PHONY: test verify fmt fuzz bench sim
 
 test:
 	go test ./... -count=1
@@ -15,6 +15,10 @@ verify:
 
 fuzz:
 	go test -run '^$$' -fuzz '^FuzzPacer$$' -fuzztime 30s .
+	go test -run '^$$' -fuzz '^FuzzFollower$$' -fuzztime 30s .
+
+sim:
+	go run ./cmd/pllsim
 
 bench:
 	go test -run '^$$' -bench . -benchmem .
