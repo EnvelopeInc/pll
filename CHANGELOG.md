@@ -2,6 +2,10 @@
 
 One entry per released version, newest first.
 
+## v0.3.1 — 2026-11-12
+
+Documentation only. The README now says that `Span.Time` reports a slot's scheduled time rounded down to whole nanoseconds, as its reference section always did.
+
 ## v0.3.0 — 2026-11-12
 
 The first release under `github.com/version2beta/pll`. Version numbers below v0.3.0 belong to an earlier, withdrawn API and do not build under this module path.
