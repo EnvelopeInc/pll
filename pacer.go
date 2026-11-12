@@ -1,6 +1,9 @@
 package pll
 
-import "time"
+import (
+	"math/big"
+	"time"
+)
 
 // Pacer divides time into evenly spaced slots numbered 0, 1, 2, … at an exact
 // rate and hands them out in order. Slot 0 is due at time zero. A cursor marks
@@ -10,13 +13,55 @@ import "time"
 // a clock. A Pacer is not safe for concurrent use. Construct it with NewPacer;
 // the zero Pacer is not usable.
 type Pacer struct {
-	// The fields are yours to choose.
+	cursor uint64   // next slot not yet handed out or skipped
+	seg    *segment // current timing; immutable, shared with issued Spans
+}
+
+// segment is one stretch of uniform timing. Slot s >= start is at exactly
+// anchor + (s-start) × pn/pd nanoseconds, where pn/pd is the period
+// den×1e21 / (num×(1e12+trim)) reduced to lowest terms. A segment is never
+// modified after it is made, so Spans may share it.
+type segment struct {
+	start  uint64 // slot S
+	anchor int64  // integer nanoseconds A
+	trim   int64  // parts per trillion q
+
+	// pn and pd hold the period when both fit in a uint64 (small is true).
+	// Otherwise bigPn and bigPd hold it and the big.Int path is used.
+	small        bool
+	pn, pd       uint64
+	bigPn, bigPd *big.Int
+}
+
+// tenTo21 is 10^21, the scale that turns a rate into nanoseconds per slot.
+var tenTo21 = new(big.Int).Exp(big.NewInt(10), big.NewInt(21), nil)
+
+// newSegment makes the segment for rate num/den with the given start slot,
+// anchor and trim. It requires num > 0, den > 0 and 1e12+trim > 0.
+func newSegment(num, den, start uint64, anchor, trim int64) *segment {
+	n := new(big.Int).Mul(new(big.Int).SetUint64(den), tenTo21)
+	d := new(big.Int).Mul(new(big.Int).SetUint64(num), big.NewInt(1_000_000_000_000+trim))
+	g := new(big.Int).GCD(nil, nil, n, d)
+	n.Quo(n, g)
+	d.Quo(d, g)
+
+	seg := &segment{start: start, anchor: anchor, trim: trim}
+	if n.IsUint64() && d.IsUint64() {
+		seg.small = true
+		seg.pn, seg.pd = n.Uint64(), d.Uint64()
+	} else {
+		seg.bigPn, seg.bigPd = n, d
+	}
+	return seg
 }
 
 // NewPacer returns a Pacer for rate r with no trim. An invalid Rate returns
 // nil and ErrInvalidRate.
 func NewPacer(r Rate) (*Pacer, error) {
-	return nil, nil
+	if r.num == 0 || r.den == 0 {
+		return nil, ErrInvalidRate
+	}
+	return &Pacer{seg: newSegment(r.num, r.den, 0, 0, 0)}, nil
 }
 
 // Due hands out the oldest slots whose exact time is at or before now, at most
@@ -77,4 +122,4 @@ func (p *Pacer) SetTrim(ppt int64) error {
 }
 
 // Trim returns the current trim in parts per trillion.
-func (p *Pacer) Trim() int64 { return 0 }
+func (p *Pacer) Trim() int64 { return p.seg.trim }
